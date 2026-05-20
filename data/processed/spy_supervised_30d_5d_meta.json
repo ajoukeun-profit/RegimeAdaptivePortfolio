@@ -1,0 +1,62 @@
+{
+  "raw_data": "data/raw/spy_daily.csv",
+  "labels": "data/processed/spy_hmm_regime_labels_5d.csv",
+  "output": "data/processed/spy_supervised_30d_5d.npz",
+  "index_output": "data/processed/spy_supervised_30d_5d_index.csv",
+  "input_window": 30,
+  "target_horizon_label_steps": 1,
+  "n_samples": 698,
+  "feature_names": [
+    "log_return",
+    "return_1d",
+    "volatility_20d_ann",
+    "ma_gap_20_60",
+    "drawdown_126d",
+    "close_to_open_log_return",
+    "high_low_log_range",
+    "volume_zscore_20d",
+    "rsi_14",
+    "macd_hist_norm"
+  ],
+  "x_shape": [
+    698,
+    30,
+    10
+  ],
+  "splits": {
+    "train": {
+      "samples": 488,
+      "class_counts": {
+        "Bear": 149,
+        "Neutral": 128,
+        "Bull": 211
+      }
+    },
+    "valid": {
+      "samples": 105,
+      "class_counts": {
+        "Bear": 43,
+        "Neutral": 19,
+        "Bull": 43
+      }
+    },
+    "test": {
+      "samples": 105,
+      "class_counts": {
+        "Bear": 43,
+        "Neutral": 21,
+        "Bull": 41
+      }
+    }
+  },
+  "standardization": "feature-wise z-score using train split only",
+  "label_encoding": {
+    "Bear": 0,
+    "Neutral": 1,
+    "Bull": 2
+  },
+  "split_bounds": {
+    "train_end": 488,
+    "valid_end": 593
+  }
+}
