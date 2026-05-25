@@ -1,156 +1,101 @@
-# HMM Regime Labeling for SPY
+# 시장 국면 인식 기반 동적 포트폴리오 전략
 
-SPY 일별 가격 데이터로 rolling Gaussian HMM을 학습해 시장 국면 라벨을 만들고, 이 라벨을 이용해 지도학습용 시계열 데이터셋을 생성하는 프로젝트입니다.
+> 금융 딥러닝 기초 기말 프로젝트 — 아주대학교 금융공학과
 
-참고 논문은 `jrfm-12-00168-v2.pdf`입니다.
+SPY 시계열 데이터에서 시장 국면(Bull / Neutral / Bear)을 학습하고, 이를 기반으로 포트폴리오 비중을 동적으로 조절하는 전략을 구성합니다. 정적 전략 및 규칙 기반 전략과 성과를 비교합니다.
 
-## 구성
+---
 
-```text
+## 전체 파이프라인
+
+```
+SPY OHLCV (raw)
+      │
+      ▼
+[1] HMM 라벨링          → Bear / Neutral / Bull 국면 라벨
+      │
+      ▼
+[2] 지도학습 데이터셋 생성  → X: (698, 30, 10)  y: (698,)
+      │
+      ▼
+[3] Conv1D + LSTM 학습   → 시장 국면 분류 모델 (Accuracy 61%)
+      │
+      ▼
+[4] 포트폴리오 백테스트   → Calmar Ratio 1.30 (전략 중 1위)
+```
+
+---
+
+## 프로젝트 구조
+
+```
 .
-├── data
-│   ├── raw
-│   │   └── spy_daily.csv
-│   └── processed
-│       ├── spy_hmm_regime_labels.csv
-│       ├── spy_hmm_regime_labels_5d.csv
-│       ├── spy_supervised_30d_5d.npz
-│       ├── spy_supervised_30d_5d_index.csv
-│       └── spy_supervised_30d_5d_meta.json
-├── scripts
-│   ├── hmm_regime_labeling.py
-│   └── prepare_supervised_dataset.py
-└── jrfm-12-00168-v2.pdf
+├── README.md
+├── jrfm-12-00168-v2.pdf          # 참고 논문
+│
+├── data/
+│   ├── raw/
+│   │   └── spy_daily.csv         # SPY OHLCV (2010-01-04 ~ 2026-05-15)
+│   └── processed/
+│       ├── spy_hmm_regime_labels.csv       # 월간 HMM 라벨 (176개)
+│       ├── spy_hmm_regime_labels_5d.csv    # 5거래일 HMM 라벨 (699개)
+│       ├── spy_supervised_30d_5d.npz       # 딥러닝 학습 데이터셋
+│       ├── spy_supervised_30d_5d_index.csv # 샘플별 날짜 인덱스
+│       └── spy_supervised_30d_5d_meta.json # 데이터셋 메타정보
+│
+├── scripts/
+│   ├── hmm_regime_labeling.py         # [1] HMM 라벨 생성
+│   ├── prepare_supervised_dataset.py  # [2] 학습 데이터셋 생성
+│   ├── train.py                       # [3] 모델 학습
+│   ├── experiments.py                 # [3] 4개 실험 비교
+│   ├── backtest.py                    # [4] 포트폴리오 백테스트
+│   └── visualize.py                   # 발표용 그래프 생성
+│
+├── outputs/
+│   ├── models/
+│   │   ├── best_model.pt              # 최종 모델 (Exp3)
+│   │   └── model_Exp*.pt              # 실험별 모델
+│   ├── figures/
+│   │   ├── fig1_experiment_comparison.png
+│   │   ├── fig2_cumulative_return.png
+│   │   ├── fig3_strategy_metrics.png
+│   │   └── fig4_confusion_matrix.png
+│   └── results/
+│       ├── experiment_results.json
+│       ├── backtest_results.json
+│       └── train_history.json
+│
+└── docs/
+    ├── OVERVIEW.md           # 프로젝트 전체 설명
+    ├── FOR_TEAMMATES.md      # 팀원용 요약
+    ├── TRAINING_RESULTS.md   # 학습 과정 분석
+    ├── MODEL_IMPROVEMENT.md  # 모델 개선 실험 상세
+    └── BACKTEST_RESULTS.md   # 백테스트 결과 분석
 ```
 
-## 방법 요약
+---
 
-`scripts/hmm_regime_labeling.py`는 다음 절차로 HMM 라벨을 생성합니다.
+## 실행 방법
 
-1. SPY OHLCV CSV를 읽고 adjusted close 기준으로 가격을 정렬합니다.
-2. 일별 feature를 계산합니다.
-   - `log_return`
-   - `volatility_20d_ann`
-   - `ma_gap_20_60`
-   - `drawdown_126d`
-3. 최근 504개 유효 거래일을 rolling window로 사용합니다.
-4. 각 window 안에서 3-state Gaussian HMM을 학습합니다.
-5. Viterbi 경로로 hidden state sequence를 추정합니다.
-6. 각 state의 수익률 Sharpe를 계산합니다.
-7. Sharpe가 가장 높은 state를 `Bull`, 가장 낮은 state를 `Bear`, 나머지를 `Neutral`로 매핑합니다.
-8. 현재 window 마지막 날짜의 state를 해당 날짜의 HMM 라벨로 저장합니다.
-
-라벨 인코딩은 다음과 같습니다.
-
-```text
-Bear    -> 0
-Neutral -> 1
-Bull    -> 2
-```
-
-## 논문 방식과의 차이
-
-현재 구현은 참고 논문의 핵심 아이디어인 `2년 rolling HMM + state별 Sharpe로 상승/하락 국면 판단`을 따르지만, 완전한 1:1 재현은 아닙니다.
-
-주요 차이는 다음과 같습니다.
-
-- 논문은 월간 리밸런싱과 월간 수익률을 사용합니다.
-- 현재 구현은 일별 데이터를 사용하고, `fit-step`으로 라벨 생성 간격을 조절합니다.
-- 논문은 adjusted close price/return 중심으로 HMM을 적용합니다.
-- 현재 구현은 수익률뿐 아니라 변동성, 이동평균 괴리, drawdown feature를 함께 사용합니다.
-- 현재 `Bear`, `Neutral`, `Bull`은 절대적인 시장 국면이 아니라 각 rolling window 안에서의 상대적인 Sharpe ranking입니다.
-
-따라서 `Bull`은 "해당 window에서 Sharpe가 가장 높은 hidden state"로 해석하는 것이 정확합니다. `Bear`도 항상 음의 Sharpe라는 뜻은 아니며, 해당 window에서 가장 낮은 Sharpe state라는 의미입니다.
-
-## 산출물
-
-### `data/processed/spy_hmm_regime_labels.csv`
-
-기본 월간 근사 라벨입니다. 기본값 기준 `fit-step=20`으로 약 한 달마다 HMM을 다시 학습하고 라벨을 생성합니다.
-
-현재 파일 기준:
-
-- 기간: `2012-06-29` ~ `2026-05-15`
-- 라벨 수: 176개
-- 라벨 분포:
-  - `Bull`: 79
-  - `Bear`: 55
-  - `Neutral`: 42
-
-### `data/processed/spy_hmm_regime_labels_5d.csv`
-
-5거래일 간격 라벨입니다. 딥러닝용 supervised dataset의 기본 라벨 파일로 사용됩니다.
-
-현재 파일 기준:
-
-- 기간: `2012-06-29` ~ `2026-05-15`
-- 라벨 수: 699개
-- 라벨 분포:
-  - `Bull`: 295
-  - `Bear`: 236
-  - `Neutral`: 168
-
-### `data/processed/spy_supervised_30d_5d.npz`
-
-`spy_hmm_regime_labels_5d.csv`를 target으로 사용해 만든 지도학습용 numpy dataset입니다.
-
-현재 파일 기준:
-
-- `X`: `(698, 30, 10)`
-- `y`: `(698,)`
-- 입력 window: 30 거래일
-- target horizon: 다음 HMM 라벨 row
-- split:
-  - train: 488 samples
-  - valid: 105 samples
-  - test: 105 samples
-
-입력 feature는 다음 10개입니다.
-
-```text
-log_return
-return_1d
-volatility_20d_ann
-ma_gap_20_60
-drawdown_126d
-close_to_open_log_return
-high_low_log_range
-volume_zscore_20d
-rsi_14
-macd_hist_norm
-```
-
-## 재생성 방법
-
-Python 3와 `numpy`가 필요합니다. 스크립트는 `pandas`, `sklearn`, `hmmlearn` 없이 동작하도록 작성되어 있습니다.
-
-### 기본 월간 근사 HMM 라벨 생성
+### 요구사항
 
 ```bash
-python3 scripts/hmm_regime_labeling.py \
-  --input data/raw/spy_daily.csv \
-  --output data/processed/spy_hmm_regime_labels.csv \
-  --train-window 504 \
-  --fit-step 20 \
-  --states 3 \
-  --smoothing-window 3 \
-  --target-horizon 1
+pip install numpy torch
 ```
 
-### 5거래일 간격 HMM 라벨 생성
+HMM 라벨링 스크립트는 `numpy`만 사용합니다 (`pandas`, `sklearn`, `hmmlearn` 불필요).
+
+### [1] HMM 라벨 생성 (팀원 담당)
 
 ```bash
 python3 scripts/hmm_regime_labeling.py \
   --input data/raw/spy_daily.csv \
   --output data/processed/spy_hmm_regime_labels_5d.csv \
-  --train-window 504 \
-  --fit-step 5 \
-  --states 3 \
-  --smoothing-window 5 \
-  --target-horizon 1
+  --train-window 504 --fit-step 5 --states 3 \
+  --smoothing-window 5 --target-horizon 1
 ```
 
-### 지도학습 데이터셋 생성
+### [2] 지도학습 데이터셋 생성 (팀원 담당)
 
 ```bash
 python3 scripts/prepare_supervised_dataset.py \
@@ -159,30 +104,104 @@ python3 scripts/prepare_supervised_dataset.py \
   --output data/processed/spy_supervised_30d_5d.npz \
   --index-output data/processed/spy_supervised_30d_5d_index.csv \
   --meta-output data/processed/spy_supervised_30d_5d_meta.json \
-  --input-window 30 \
-  --target-horizon 1
+  --input-window 30 --target-horizon 1
 ```
 
-## 라벨 CSV 주요 컬럼
+### [3] 모델 학습
 
-- `date`: 라벨 날짜
-- `hmm_state`: HMM raw hidden state id
-- `hmm_label`: `Bear`, `Neutral`, `Bull`
-- `hmm_label_code`: 라벨 정수 코드
-- `prob_bear`, `prob_neutral`, `prob_bull`: 현재 시점의 state posterior probability를 라벨 기준으로 합산한 값
-- `smooth_prob_*`: 라벨 row 기준 rolling average probability
-- `state_mean_daily_return`: 현재 state의 window 내 평균 일별 log return
-- `state_ann_return`: 현재 state의 연율화 수익률
-- `state_ann_vol`: 현재 state의 연율화 변동성
-- `state_sharpe`: 현재 state의 Sharpe
-- `state_count`: 현재 rolling window 안에서 현재 state에 속한 관측치 수
-- `model_loglik`: HMM log likelihood
-- `target_label_plus_1_steps`: 다음 라벨 row의 라벨
-- `target_code_plus_1_steps`: 다음 라벨 row의 정수 코드
+```bash
+python3 scripts/train.py          # 기본 학습 (best_model.pt 저장)
+python3 scripts/experiments.py    # 4개 실험 전체 비교
+```
 
-## 주의사항
+### [4] 백테스트 및 시각화
 
-- `target_label_plus_1_steps`는 마지막 row에서 비어 있습니다. 미래 라벨이 없기 때문에 정상입니다.
-- `smooth_prob_*`는 calendar day가 아니라 라벨 row 기준 smoothing입니다.
-- supervised dataset의 입력 feature에는 HMM posterior probability를 넣지 않았습니다. 라벨 생성 모델의 정보를 predictor 입력에 직접 넣는 leakage를 피하기 위한 선택입니다.
-- 시간 순서 split을 사용합니다. train/valid/test split 전에 전체 데이터를 shuffle하지 않습니다.
+```bash
+python3 scripts/backtest.py       # 전략별 성과 비교
+python3 scripts/visualize.py      # 발표용 그래프 생성
+```
+
+---
+
+## 모델 구조: Conv1D + LSTM
+
+```
+입력 (batch, 30, 10)
+      ↓
+Conv1D × 2   — 3일 단위 국소 패턴 추출, 노이즈 완화
+      ↓
+LSTM         — 시간 흐름 학습, 장기 의존성 포착
+      ↓
+Linear + Softmax
+      ↓
+출력 (batch, 3)  →  [p_bear, p_neutral, p_bull]
+```
+
+포트폴리오 비중 결정:
+```
+w_stock = p_bull + 0.5 × p_neutral
+w_cash  = 1 - w_stock
+```
+
+---
+
+## 모델 개선 실험 결과
+
+| 실험 | 변경 내용 | Accuracy | Bear | Neutral | Bull |
+|------|---------|---------|------|---------|------|
+| Exp1 | Baseline | 57.1% | 34.9% | 23.8% | 97.6% |
+| Exp2 | Focal Loss | 52.4% | 34.9% | 47.6% | 73.2% |
+| **Exp3** | **Focal Loss + Data Augmentation** | **61.0%** | **46.5%** | 33.3% | 90.2% |
+| Exp4 | BiLSTM + Attention | 49.5% | 30.2% | 38.1% | 75.6% |
+
+**Data Augmentation**(학습 데이터 488→976개)이 가장 효과적이었습니다.
+
+---
+
+## 백테스트 결과 (2024.04 ~ 2026.05)
+
+| 전략 | 누적수익 | Sharpe | MDD | Calmar |
+|------|--------|--------|-----|--------|
+| Buy & Hold | 49.9% | 1.07 | -17.0% | 1.26 |
+| 60/40 | 28.3% | 0.84 | -10.4% | 1.22 |
+| MA Crossover | 29.1% | 0.82 | -10.9% | 1.19 |
+| **Conv1D+LSTM (ours)** | **14.8%** | 0.33 | **-5.2%** | **1.30** |
+
+테스트 기간이 강한 상승장(AI 붐, 미국 금리 인하)이어서 절대 수익률은 낮지만, **MDD -5.2%와 Calmar Ratio 1.30으로 하락 방어 측면에서 모든 전략 중 1위**입니다.
+
+---
+
+## HMM 라벨링 상세 (팀원 파트)
+
+### 방법
+
+- 504거래일(2년) rolling window로 3-state Gaussian HMM 학습
+- 각 state의 Sharpe ratio 비교 → Bull / Neutral / Bear 매핑
+- 라벨 인코딩: `Bear=0`, `Neutral=1`, `Bull=2`
+
+### 논문과의 차이
+
+참고 논문(`jrfm-12-00168-v2.pdf`)의 핵심 아이디어(2년 rolling HMM + Sharpe 기반 국면 판단)를 따르되, 다음 차이가 있습니다.
+
+- 논문은 월간 리밸런싱 / 현재 구현은 5거래일 간격
+- 논문은 수익률만 사용 / 현재 구현은 변동성, MA 괴리, drawdown 추가
+- Bear/Neutral/Bull은 절대 기준이 아닌 **rolling window 내 상대적 Sharpe ranking**
+
+### 주요 컬럼 (`spy_hmm_regime_labels_5d.csv`)
+
+| 컬럼 | 설명 |
+|------|------|
+| `hmm_label` | Bear / Neutral / Bull |
+| `hmm_label_code` | 0 / 1 / 2 |
+| `prob_bear/neutral/bull` | 현재 시점 state posterior 확률 |
+| `state_sharpe` | 현재 state의 rolling window 내 Sharpe |
+| `target_label_plus_1_steps` | 다음 라벨 (모델 예측 목표) |
+
+---
+
+## 참고 문헌
+
+1. Nguyen, T. et al. (2019). *Forecasting Stock Prices Using HMM*. JRFM 12(4), 168.
+2. Fischer, T. & Krauss, C. (2018). *Deep learning with LSTM networks for financial market predictions*. EJOR, 270(2), 654–669.
+3. Gu, S., Kelly, B., & Xiu, D. (2020). *Empirical Asset Pricing via Machine Learning*. RFS, 33(5), 2223–2273.
+4. Lin, T. Y. et al. (2017). *Focal Loss for Dense Object Detection*. ICCV.
