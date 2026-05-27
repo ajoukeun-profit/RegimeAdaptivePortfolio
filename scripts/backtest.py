@@ -4,12 +4,14 @@
 
 import csv
 import json
+import sys
+from pathlib import Path
+
 import numpy as np
 import torch
-import torch.nn as nn
 
-# ── train.py에서 모델 정의 재사용 ────────────────────────────────
-# (같은 파일에 합치지 않고 독립 실행 가능하도록 여기서도 정의)
+sys.path.insert(0, str(Path(__file__).parent))
+from train import RegimeClassifier
 
 device = (
     torch.device("mps") if torch.backends.mps.is_available()
@@ -17,44 +19,13 @@ device = (
     else torch.device("cpu")
 )
 
-class ConvBlock(nn.Module):
-    def __init__(self, in_channels, out_channels, kernel_size=3):
-        super().__init__()
-        pad = kernel_size // 2
-        self.net = nn.Sequential(
-            nn.Conv1d(in_channels, 32,           kernel_size, padding=pad),
-            nn.BatchNorm1d(32), nn.ReLU(),
-            nn.Conv1d(32,         out_channels,  kernel_size, padding=pad),
-            nn.BatchNorm1d(out_channels), nn.ReLU(),
-        )
-    def forward(self, x):
-        return self.net(x.transpose(1,2)).transpose(1,2)
-
-class RegimeClassifier(nn.Module):
-    def __init__(self, input_size=10, conv_channels=32,
-                 lstm_hidden=64, lstm_layers=1, dropout=0.5):
-        super().__init__()
-        self.conv = ConvBlock(input_size, conv_channels)
-        self.lstm = nn.LSTM(conv_channels, lstm_hidden,
-                            lstm_layers, batch_first=True)
-        self.classifier = nn.Sequential(
-            nn.Linear(lstm_hidden, 32), nn.ReLU(),
-            nn.Dropout(dropout), nn.Linear(32, 3),
-        )
-    def forward(self, x):
-        x = self.conv(x)
-        _, (h_n, _) = self.lstm(x)
-        return self.classifier(h_n[-1])
-    def predict_proba(self, x):
-        return torch.softmax(self.forward(x), dim=-1)
-
 
 # ── 1. 데이터 로드 ───────────────────────────────────────────────
-data      = np.load("data/processed/spy_supervised_30d_5d.npz", allow_pickle=True)
-X_test    = torch.tensor(data["X_test"].astype(np.float32)).to(device)
+data   = np.load("data/processed/cross_asset_supervised_30d_5d.npz", allow_pickle=True)
+X_test = torch.tensor(data["X_test"].astype(np.float32)).to(device)
 
 # 날짜 인덱스
-index_rows = list(csv.DictReader(open("data/processed/spy_supervised_30d_5d_index.csv")))
+index_rows = list(csv.DictReader(open("data/processed/cross_asset_supervised_30d_5d_index.csv")))
 test_rows  = [r for r in index_rows if r["split"] == "test"]   # 105개
 
 # SPY 일별 가격 (Adj Close)
@@ -67,7 +38,7 @@ spy_dates  = sorted(spy_prices.keys())
 
 
 # ── 2. 모델 예측 ─────────────────────────────────────────────────
-model = RegimeClassifier().to(device)
+model = RegimeClassifier(input_size=40, conv_channels=16, lstm_hidden=32).to(device)
 model.load_state_dict(torch.load("outputs/models/best_model.pt", map_location=device))
 model.eval()
 

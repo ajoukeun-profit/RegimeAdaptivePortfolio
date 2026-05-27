@@ -21,7 +21,7 @@ SPY + QQQ + GLD + TLT OHLCV (raw)
 [3] Conv1D + LSTM 학습   → 시장 국면 분류 모델 (Accuracy 61.9%)
       │                     AdamW + Neutral-boost + Balanced Accuracy 기준 저장
       ▼
-[4] 포트폴리오 백테스트   → Calmar Ratio 1.30 (전략 중 1위)
+[4] 포트폴리오 백테스트   → Calmar Ratio 1.35 (전략 중 1위)
 ```
 
 ---
@@ -232,17 +232,16 @@ w_cash  = 1 - w_stock
 
 ## 모델 개선 실험 결과
 
-총 17개 실험을 4단계(Phase)로 진행하였습니다. 상세 내용은 [docs/MODEL_IMPROVEMENT.md](docs/MODEL_IMPROVEMENT.md)를 참고하세요.
+총 3단계(Phase) 실험을 진행하였습니다. 상세 내용은 [docs/MODEL_IMPROVEMENT.md](docs/MODEL_IMPROVEMENT.md)를 참고하세요.
 
 | 단계 | 실험 | Accuracy | Bear | Neutral | Bull |
 |------|------|---------|------|---------|------|
 | Phase 1 | Baseline (SPY, 10 피처) | 57.1% | 34.9% | 23.8% | 97.6% |
 | Phase 1 | Focal Loss + Augmentation | 61.0% | 46.5% | 33.3% | 90.2% |
-| Phase 2 | 4자산 각자 라벨 (40 피처) | 59.8% | 58.8% | 25.3% | 80.6% |
-| Phase 3 | Cross-asset 피처 (SPY 라벨) | 62.9% | 53.5% | 19.0% | 95.1% |
-| **Phase 4** | **AdamW + Neutral-boost (최종)** | **61.9%** | **60.5%** | 0.0% | **95.1%** |
+| Phase 2 | 4자산 각자 라벨 (10 피처) | 59.8% | 58.8% | 25.3% | 80.6% |
+| **Phase 3** | **Cross-asset 피처 + AdamW + Neutral-boost (최종)** | **61.9%** | **60.5%** | 0.0% | **95.1%** |
 
-**최종 모델**: Cross-asset 피처(30×40) + AdamW + Neutral-boost 1.2, Accuracy **61.9%**
+**최종 모델**: Cross-asset 피처(30×40) + AdamW + Neutral-boost 1.2, seed=42 고정, Accuracy **61.9%**
 
 ---
 
@@ -253,9 +252,9 @@ w_cash  = 1 - w_stock
 | Buy & Hold | 49.9% | 1.07 | -17.0% | 1.26 |
 | 60/40 | 28.3% | 0.84 | -10.4% | 1.22 |
 | MA Crossover | 29.1% | 0.82 | -10.9% | 1.19 |
-| **Conv1D+LSTM (ours)** | **14.8%** | 0.33 | **-5.2%** | **1.30** |
+| **Conv1D+LSTM (ours)** | **21.9%** | 0.73 | **-7.4%** | **1.35** |
 
-테스트 기간이 강한 상승장(AI 붐, 미국 금리 인하)이어서 절대 수익률은 낮지만, **MDD -5.2%와 Calmar Ratio 1.30으로 하락 방어 측면에서 모든 전략 중 1위**입니다.
+테스트 기간이 강한 상승장(AI 붐, 미국 금리 인하)이어서 절대 수익률은 낮지만, **MDD -7.4%와 Calmar Ratio 1.35로 하락 방어 측면에서 모든 전략 중 1위**입니다.
 
 ---
 

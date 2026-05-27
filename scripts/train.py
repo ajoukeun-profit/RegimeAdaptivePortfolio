@@ -263,6 +263,7 @@ def train(
     bidirectional: bool = False,
     print_every: int = 5,
     best_metric: str = "val_bal_acc",
+    optimizer_name: str = "adamw",
 ):
     train_loader = DataLoader(
         TensorDataset(torch.tensor(X_train), torch.tensor(y_train)),
@@ -297,11 +298,18 @@ def train(
         label_smoothing=label_smoothing,
     )
 
-    optimizer = torch.optim.AdamW(
-        model.parameters(),
-        lr=lr,
-        weight_decay=weight_decay,
-    )
+    if optimizer_name == "adam":
+        optimizer = torch.optim.Adam(
+            model.parameters(),
+            lr=lr,
+            weight_decay=weight_decay,
+        )
+    else:
+        optimizer = torch.optim.AdamW(
+            model.parameters(),
+            lr=lr,
+            weight_decay=weight_decay,
+        )
 
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
         optimizer,
@@ -339,6 +347,7 @@ def train(
     print(f"  weight_decay    : {weight_decay}")
     print(f"  label_smoothing : {label_smoothing}")
     print(f"  neutral_boost   : {neutral_boost}")
+    print(f"  optimizer       : {optimizer_name}")
     print(f"  class_weights   : {class_weights.detach().cpu().numpy().round(4).tolist()}")
     print(f"  batch_size      : {batch_size}")
     print(f"  max_epochs      : {n_epochs}")
@@ -614,6 +623,13 @@ def build_arg_parser():
         help="Metric used for best model selection.",
     )
 
+    parser.add_argument(
+        "--optimizer",
+        type=str,
+        default="adamw",
+        choices=["adam", "adamw"],
+        help="Optimizer to use. adam: Adam, adamw: AdamW (default)",
+    )
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--print-every", type=int, default=5)
 
@@ -674,6 +690,7 @@ if __name__ == "__main__":
         bidirectional=args.bidirectional,
         print_every=args.print_every,
         best_metric=args.best_metric,
+        optimizer_name=args.optimizer,
     )
 
     acc, bal_acc, recalls, preds, probs, cm = evaluate(

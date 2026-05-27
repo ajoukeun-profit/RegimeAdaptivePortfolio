@@ -209,7 +209,7 @@
   ],
   "args": {
     "data": "data/processed/cross_asset_supervised_30d_5d.npz",
-    "model_output": "outputs/models/best_model_mr.pt",
+    "model_output": "outputs/models/best_model.pt",
     "history_output": "outputs/results/train_history.json",
     "epochs": 80,
     "batch_size": 16,
@@ -223,6 +223,7 @@
     "label_smoothing": 0.0,
     "neutral_boost": 1.2,
     "best_metric": "val_bal_acc",
+    "optimizer": "adamw",
     "seed": 42,
     "print_every": 5,
     "bidirectional": false
