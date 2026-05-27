@@ -44,12 +44,13 @@ SPY OHLCV (raw)
 │       ├── spy_hmm_regime_labels_5d.csv    # 5거래일 HMM 라벨 (699개)
 │       ├── *_hmm_regime_labels_5d.csv      # 자산별 HMM 라벨
 │       ├── multi_asset_hmm_regime_labels_5d.csv # asset 컬럼 포함 통합 라벨
-│       ├── multi_asset_supervised_30d_5d.npz # 다자산 딥러닝 학습 데이터셋
-│       ├── multi_asset_supervised_30d_5d_index.csv
-│       ├── multi_asset_supervised_30d_5d_meta.json
-│       ├── spy_supervised_30d_5d.npz       # 딥러닝 학습 데이터셋
+│       ├── spy_supervised_30d_5d.npz       # SPY 단일 자산 학습 데이터셋 (698샘플, 30×10)
 │       ├── spy_supervised_30d_5d_index.csv # 샘플별 날짜 인덱스
-│       └── spy_supervised_30d_5d_meta.json # 데이터셋 메타정보
+│       ├── spy_supervised_30d_5d_meta.json # 데이터셋 메타정보
+│       ├── cross_asset_supervised_30d_5d.npz # 교차 자산 피처 (698샘플, 30×40, SPY 라벨)
+│       ├── multi_asset_supervised_30d_5d.npz # 다자산 딥러닝 학습 데이터셋 (2792샘플)
+│       ├── multi_asset_supervised_30d_5d_index.csv
+│       └── multi_asset_supervised_30d_5d_meta.json
 │
 ├── scripts/
 │   ├── hmm_regime_labeling.py         # [1] 단일 자산 HMM 라벨 생성
@@ -151,11 +152,45 @@ python3 scripts/prepare_multi_asset_supervised_dataset.py
 
 ```bash
 python3 scripts/train.py          # 기본 학습 (best_model.pt 저장)
+python3 scripts/experiments.py    # 4개 실험 전체 비교
+```
+
+#### `train.py` 옵션 설명
+
+| 옵션 | 기본값 | 설명 |
+|------|--------|------|
+| `--data` | `data/processed/spy_supervised_30d_5d.npz` | 학습할 데이터 파일 경로 |
+| `--model-output` | `outputs/models/best_model.pt` | 학습된 모델 저장 위치 |
+| `--history-output` | `outputs/results/train_history.json` | 학습 기록(loss/acc) 저장 위치 |
+| `--epochs` | `200` | 최대 학습 반복 횟수 |
+| `--batch-size` | `16` | 한 번에 볼 샘플 수 |
+| `--lr` | `3e-4` | 학습률 (learning rate) |
+| `--patience` | `25` | 성능이 개선되지 않아도 기다릴 epoch 수 (early stopping) |
+
+#### 예시
+
+```bash
+# SPY 단일 자산 기본 학습
+python3 scripts/train.py
+
+# 교차 자산(SPY+QQQ+GLD+TLT) 피처로 학습
+python3 scripts/train.py \
+  --data data/processed/cross_asset_supervised_30d_5d.npz \
+  --model-output outputs/models/best_model_cross_asset.pt \
+  --history-output outputs/results/train_history_cross_asset.json
+
+# 다자산 라벨 데이터로 학습
 python3 scripts/train.py \
   --data data/processed/multi_asset_supervised_30d_5d.npz \
   --model-output outputs/models/best_model_multi_asset.pt \
   --history-output outputs/results/train_history_multi_asset.json
-python3 scripts/experiments.py    # 4개 실험 전체 비교
+
+# 하이퍼파라미터 직접 지정
+python3 scripts/train.py \
+  --epochs 300 \
+  --batch-size 32 \
+  --lr 1e-4 \
+  --patience 50
 ```
 
 ### [4] 백테스트 및 시각화

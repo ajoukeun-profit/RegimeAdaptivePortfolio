@@ -1,0 +1,92 @@
+{
+  "description": "Cross-asset features (SPY+QQQ+GLD+TLT), SPY label only",
+  "assets": [
+    "spy",
+    "qqq",
+    "gld",
+    "tlt"
+  ],
+  "label_source": "SPY HMM regime only",
+  "input_window": 30,
+  "n_features_per_asset": 10,
+  "total_features": 40,
+  "x_shape": [
+    698,
+    30,
+    40
+  ],
+  "feature_names": [
+    "spy_log_return",
+    "spy_return_1d",
+    "spy_volatility_20d_ann",
+    "spy_ma_gap_20_60",
+    "spy_drawdown_126d",
+    "spy_close_to_open_log_return",
+    "spy_high_low_log_range",
+    "spy_volume_zscore_20d",
+    "spy_rsi_14",
+    "spy_macd_hist_norm",
+    "qqq_log_return",
+    "qqq_return_1d",
+    "qqq_volatility_20d_ann",
+    "qqq_ma_gap_20_60",
+    "qqq_drawdown_126d",
+    "qqq_close_to_open_log_return",
+    "qqq_high_low_log_range",
+    "qqq_volume_zscore_20d",
+    "qqq_rsi_14",
+    "qqq_macd_hist_norm",
+    "gld_log_return",
+    "gld_return_1d",
+    "gld_volatility_20d_ann",
+    "gld_ma_gap_20_60",
+    "gld_drawdown_126d",
+    "gld_close_to_open_log_return",
+    "gld_high_low_log_range",
+    "gld_volume_zscore_20d",
+    "gld_rsi_14",
+    "gld_macd_hist_norm",
+    "tlt_log_return",
+    "tlt_return_1d",
+    "tlt_volatility_20d_ann",
+    "tlt_ma_gap_20_60",
+    "tlt_drawdown_126d",
+    "tlt_close_to_open_log_return",
+    "tlt_high_low_log_range",
+    "tlt_volume_zscore_20d",
+    "tlt_rsi_14",
+    "tlt_macd_hist_norm"
+  ],
+  "splits": {
+    "train": {
+      "samples": 488,
+      "class_counts": {
+        "Bear": 149,
+        "Neutral": 128,
+        "Bull": 211
+      }
+    },
+    "valid": {
+      "samples": 105,
+      "class_counts": {
+        "Bear": 43,
+        "Neutral": 19,
+        "Bull": 43
+      }
+    },
+    "test": {
+      "samples": 105,
+      "class_counts": {
+        "Bear": 43,
+        "Neutral": 21,
+        "Bull": 41
+      }
+    }
+  },
+  "standardization": "feature-wise z-score using train split only",
+  "label_encoding": {
+    "Bear": 0,
+    "Neutral": 1,
+    "Bull": 2
+  }
+}

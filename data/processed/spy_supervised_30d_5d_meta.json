@@ -1,11 +1,11 @@
 {
   "raw_data": "data/raw/spy_daily.csv",
-  "labels": "data/processed/spy_hmm_regime_labels_5d.csv",
-  "output": "data/processed/spy_supervised_30d_5d.npz",
+  "labels": "data/processed/spy_hmm_regime_labels_3d.csv",
+  "output": "data/processed/spy_supervised_30d_3d.npz",
   "index_output": "data/processed/spy_supervised_30d_5d_index.csv",
   "input_window": 30,
   "target_horizon_label_steps": 1,
-  "n_samples": 698,
+  "n_samples": 1163,
   "feature_names": [
     "log_return",
     "return_1d",
@@ -19,33 +19,33 @@
     "macd_hist_norm"
   ],
   "x_shape": [
-    698,
+    1163,
     30,
     10
   ],
   "splits": {
     "train": {
-      "samples": 488,
+      "samples": 814,
       "class_counts": {
-        "Bear": 149,
-        "Neutral": 128,
-        "Bull": 211
+        "Bear": 245,
+        "Neutral": 229,
+        "Bull": 340
       }
     },
     "valid": {
-      "samples": 105,
+      "samples": 174,
       "class_counts": {
-        "Bear": 43,
-        "Neutral": 19,
-        "Bull": 43
+        "Bear": 72,
+        "Neutral": 30,
+        "Bull": 72
       }
     },
     "test": {
-      "samples": 105,
+      "samples": 175,
       "class_counts": {
-        "Bear": 43,
-        "Neutral": 21,
-        "Bull": 41
+        "Bear": 68,
+        "Neutral": 37,
+        "Bull": 70
       }
     }
   },
@@ -56,7 +56,7 @@
     "Bull": 2
   },
   "split_bounds": {
-    "train_end": 488,
-    "valid_end": 593
+    "train_end": 814,
+    "valid_end": 988
   }
 }
