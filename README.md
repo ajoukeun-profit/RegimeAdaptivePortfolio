@@ -35,17 +35,27 @@ SPY OHLCV (raw)
 │
 ├── data/
 │   ├── raw/
-│   │   └── spy_daily.csv         # SPY OHLCV (2010-01-04 ~ 2026-05-15)
+│   │   ├── spy_daily.csv         # SPY OHLCV (2010-01-04 ~ 2026-05-15)
+│   │   ├── qqq_daily.csv         # QQQ OHLCV
+│   │   ├── gld_daily.csv         # GLD OHLCV
+│   │   └── tlt_daily.csv         # TLT OHLCV
 │   └── processed/
 │       ├── spy_hmm_regime_labels.csv       # 월간 HMM 라벨 (176개)
 │       ├── spy_hmm_regime_labels_5d.csv    # 5거래일 HMM 라벨 (699개)
+│       ├── *_hmm_regime_labels_5d.csv      # 자산별 HMM 라벨
+│       ├── multi_asset_hmm_regime_labels_5d.csv # asset 컬럼 포함 통합 라벨
+│       ├── multi_asset_supervised_30d_5d.npz # 다자산 딥러닝 학습 데이터셋
+│       ├── multi_asset_supervised_30d_5d_index.csv
+│       ├── multi_asset_supervised_30d_5d_meta.json
 │       ├── spy_supervised_30d_5d.npz       # 딥러닝 학습 데이터셋
 │       ├── spy_supervised_30d_5d_index.csv # 샘플별 날짜 인덱스
 │       └── spy_supervised_30d_5d_meta.json # 데이터셋 메타정보
 │
 ├── scripts/
-│   ├── hmm_regime_labeling.py         # [1] HMM 라벨 생성
+│   ├── hmm_regime_labeling.py         # [1] 단일 자산 HMM 라벨 생성
+│   ├── generate_multi_asset_hmm_labels.py # [1-확장] 다자산 HMM 라벨 생성
 │   ├── prepare_supervised_dataset.py  # [2] 학습 데이터셋 생성
+│   ├── prepare_multi_asset_supervised_dataset.py # [2-확장] 다자산 학습 데이터셋 생성
 │   ├── train.py                       # [3] 모델 학습
 │   ├── experiments.py                 # [3] 4개 실험 비교
 │   ├── backtest.py                    # [4] 포트폴리오 백테스트
@@ -70,7 +80,8 @@ SPY OHLCV (raw)
     ├── FOR_TEAMMATES.md      # 팀원용 요약
     ├── TRAINING_RESULTS.md   # 학습 과정 분석
     ├── MODEL_IMPROVEMENT.md  # 모델 개선 실험 상세
-    └── BACKTEST_RESULTS.md   # 백테스트 결과 분석
+    ├── BACKTEST_RESULTS.md   # 백테스트 결과 분석
+    └── MULTI_ASSET_LABELS.md # 다자산 라벨 생성 설명
 ```
 
 ---
@@ -95,6 +106,21 @@ python3 scripts/hmm_regime_labeling.py \
   --smoothing-window 5 --target-horizon 1
 ```
 
+### [1-확장] 다자산 HMM 라벨 생성
+
+```bash
+python3 scripts/generate_multi_asset_hmm_labels.py \
+  --assets SPY QQQ GLD TLT \
+  --start 2010-01-01 --end 2026-05-15
+```
+
+출력:
+
+- `data/processed/{asset}_hmm_regime_labels_5d.csv`: 자산별 라벨
+- `data/processed/multi_asset_hmm_regime_labels_5d.csv`: `asset` 컬럼을 붙인 통합 라벨
+
+주의: 현재 `prepare_supervised_dataset.py`는 단일 `--raw`와 단일 `--labels`를 입력으로 받는다. 통합 라벨 CSV를 바로 넣으면 자산별 raw 데이터와 날짜가 섞이므로, 학습 데이터셋 확장 시에는 자산별 샘플을 만든 뒤 합치는 방식이 필요하다.
+
 ### [2] 지도학습 데이터셋 생성 (팀원 담당)
 
 ```bash
@@ -107,10 +133,28 @@ python3 scripts/prepare_supervised_dataset.py \
   --input-window 30 --target-horizon 1
 ```
 
+### [2-확장] 다자산 지도학습 데이터셋 생성
+
+```bash
+python3 scripts/prepare_multi_asset_supervised_dataset.py
+```
+
+출력:
+
+- `data/processed/multi_asset_supervised_30d_5d.npz`
+- `data/processed/multi_asset_supervised_30d_5d_index.csv`
+- `data/processed/multi_asset_supervised_30d_5d_meta.json`
+
+이 스크립트는 자산별 `(raw, labels)` 쌍을 따로 샘플링한 뒤 합친다. split은 target date 기준 시간순으로 나누므로 같은 날짜의 SPY/QQQ/GLD/TLT 샘플이 서로 다른 split에 들어가지 않는다.
+
 ### [3] 모델 학습
 
 ```bash
 python3 scripts/train.py          # 기본 학습 (best_model.pt 저장)
+python3 scripts/train.py \
+  --data data/processed/multi_asset_supervised_30d_5d.npz \
+  --model-output outputs/models/best_model_multi_asset.pt \
+  --history-output outputs/results/train_history_multi_asset.json
 python3 scripts/experiments.py    # 4개 실험 전체 비교
 ```
 

@@ -1,0 +1,110 @@
+{
+  "assets": [
+    "SPY",
+    "QQQ",
+    "GLD",
+    "TLT"
+  ],
+  "sources": {
+    "SPY": {
+      "raw_data": "data/raw/spy_daily.csv",
+      "labels": "data/processed/spy_hmm_regime_labels_5d.csv"
+    },
+    "QQQ": {
+      "raw_data": "data/raw/qqq_daily.csv",
+      "labels": "data/processed/qqq_hmm_regime_labels_5d.csv"
+    },
+    "GLD": {
+      "raw_data": "data/raw/gld_daily.csv",
+      "labels": "data/processed/gld_hmm_regime_labels_5d.csv"
+    },
+    "TLT": {
+      "raw_data": "data/raw/tlt_daily.csv",
+      "labels": "data/processed/tlt_hmm_regime_labels_5d.csv"
+    }
+  },
+  "output": "data/processed/multi_asset_supervised_30d_5d.npz",
+  "index_output": "data/processed/multi_asset_supervised_30d_5d_index.csv",
+  "input_window": 30,
+  "target_horizon_label_steps": 1,
+  "n_samples": 2792,
+  "n_target_dates": 698,
+  "feature_names": [
+    "log_return",
+    "return_1d",
+    "volatility_20d_ann",
+    "ma_gap_20_60",
+    "drawdown_126d",
+    "close_to_open_log_return",
+    "high_low_log_range",
+    "volume_zscore_20d",
+    "rsi_14",
+    "macd_hist_norm"
+  ],
+  "x_shape": [
+    2792,
+    30,
+    10
+  ],
+  "splits": {
+    "train": {
+      "samples": 1952,
+      "class_counts": {
+        "Bear": 624,
+        "Neutral": 654,
+        "Bull": 674
+      },
+      "asset_counts": {
+        "GLD": 488,
+        "QQQ": 488,
+        "SPY": 488,
+        "TLT": 488
+      }
+    },
+    "valid": {
+      "samples": 420,
+      "class_counts": {
+        "Bear": 141,
+        "Neutral": 109,
+        "Bull": 170
+      },
+      "asset_counts": {
+        "GLD": 105,
+        "QQQ": 105,
+        "SPY": 105,
+        "TLT": 105
+      }
+    },
+    "test": {
+      "samples": 420,
+      "class_counts": {
+        "Bear": 160,
+        "Neutral": 95,
+        "Bull": 165
+      },
+      "asset_counts": {
+        "GLD": 105,
+        "QQQ": 105,
+        "SPY": 105,
+        "TLT": 105
+      }
+    }
+  },
+  "standardization": "feature-wise z-score using train split only",
+  "split_policy": "chronological split by unique target_date; all assets on a date stay in the same split",
+  "label_encoding": {
+    "Bear": 0,
+    "Neutral": 1,
+    "Bull": 2
+  },
+  "asset_encoding": {
+    "SPY": 0,
+    "QQQ": 1,
+    "GLD": 2,
+    "TLT": 3
+  },
+  "split_bounds": {
+    "train_end": 1952,
+    "valid_end": 2372
+  }
+}

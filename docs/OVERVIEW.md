@@ -29,7 +29,7 @@
 
 | 역할 | 담당 | 산출물 |
 |------|------|--------|
-| HMM 라벨링 | 팀원 | `spy_hmm_regime_labels_5d.csv` |
+| HMM 라벨링 | 팀원 | `spy_hmm_regime_labels_5d.csv`, `multi_asset_hmm_regime_labels_5d.csv` |
 | 딥러닝 모델 학습 | 나 | `train.py`, 백테스트 코드 |
 
 ---
@@ -39,6 +39,7 @@
 ```
 [Raw Data]
 spy_daily.csv (SPY OHLCV, 2010-01-04 ~ 2026-05-15, 4117일)
+qqq_daily.csv / gld_daily.csv / tlt_daily.csv (다자산 확장용)
         │
         ▼
 [Step 1: HMM 라벨링]  ← 팀원이 완성
@@ -49,16 +50,19 @@ hmm_regime_labeling.py
         │
         ▼
 spy_hmm_regime_labels_5d.csv (699행, 5거래일 간격 라벨)
+multi_asset_hmm_regime_labels_5d.csv (asset 컬럼 포함 통합 라벨)
         │
         ▼
 [Step 2: 지도학습 데이터셋 생성]  ← 팀원이 완성
 prepare_supervised_dataset.py
+prepare_multi_asset_supervised_dataset.py (다자산 확장)
   - 30거래일 입력 window 생성
   - 10개 기술적 지표 feature 계산
   - train/valid/test 시간순 분리 + z-score 정규화
         │
         ▼
 spy_supervised_30d_5d.npz (딥러닝 입력 데이터)
+multi_asset_supervised_30d_5d.npz (SPY/QQQ/GLD/TLT 통합 학습 데이터)
         │
         ▼
 [Step 3: 딥러닝 모델 학습]  ← 내가 담당
@@ -115,6 +119,12 @@ date        hmm_label  hmm_label_code  prob_bear  prob_neutral  prob_bull  targe
 | `state_sharpe` | 현재 state의 rolling window 내 Sharpe ratio |
 
 > **라벨 해석 주의**: Bull은 "주가가 반드시 오른다"는 뜻이 아니라, 해당 rolling window 안에서 Sharpe ratio가 가장 높은 state를 의미한다.
+
+다자산 확장 라벨은 `data/processed/multi_asset_hmm_regime_labels_5d.csv`에 저장한다. 이 파일은 `asset` 컬럼으로 SPY/QQQ/GLD/TLT를 구분하는 통합 라벨이며, 자산별 파일은 `data/processed/{asset}_hmm_regime_labels_5d.csv` 형식으로 저장한다.
+
+> **사용 주의**: 현재 지도학습 데이터셋 생성 스크립트는 단일 raw CSV와 단일 labels CSV를 입력으로 받는다. 통합 라벨을 그대로 넣으면 SPY feature에 QQQ/GLD/TLT 라벨이 섞일 수 있으므로, 다자산 학습 데이터셋은 자산별 `(raw, labels)` 쌍으로 샘플을 만든 뒤 합쳐야 한다.
+
+다자산 학습용 배열은 `scripts/prepare_multi_asset_supervised_dataset.py`로 생성한다. 출력 파일은 `data/processed/multi_asset_supervised_30d_5d.npz`이며, 같은 target date의 네 자산 샘플이 같은 split에 들어가도록 나눈다.
 
 ---
 

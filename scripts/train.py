@@ -2,7 +2,10 @@
 Market Regime Classification: Conv1D + LSTM
 """
 
+import argparse
 import json
+from pathlib import Path
+
 import numpy as np
 import torch
 import torch.nn as nn
@@ -15,24 +18,27 @@ device = (
     else torch.device("cpu")
 )
 
-# ── 1. 데이터 로드 ───────────────────────────────────────────────
-data = np.load("data/processed/spy_supervised_30d_5d.npz", allow_pickle=True)
-
-X_train = data["X_train"].astype(np.float32)
-y_train = data["y_train"].astype(np.int64)
-X_valid = data["X_valid"].astype(np.float32)
-y_valid = data["y_valid"].astype(np.int64)
-X_test  = data["X_test"].astype(np.float32)
-y_test  = data["y_test"].astype(np.int64)
-
 label_names = ["Bear", "Neutral", "Bull"]
 
-# ── 2. 클래스 가중치 ─────────────────────────────────────────────
-n_samples    = len(y_train)
-class_counts = np.bincount(y_train, minlength=3).astype(np.float32)
-class_weights = torch.tensor(
-    n_samples / (3 * class_counts), dtype=torch.float32
-).to(device)
+
+def load_dataset(path: Path):
+    data = np.load(path, allow_pickle=True)
+    return (
+        data["X_train"].astype(np.float32),
+        data["y_train"].astype(np.int64),
+        data["X_valid"].astype(np.float32),
+        data["y_valid"].astype(np.int64),
+        data["X_test"].astype(np.float32),
+        data["y_test"].astype(np.int64),
+    )
+
+
+def make_class_weights(y_train):
+    n_samples = len(y_train)
+    counts = np.bincount(y_train, minlength=3).astype(np.float32)
+    if np.any(counts == 0):
+        raise ValueError(f"All classes must appear in train split. Counts: {counts.tolist()}")
+    return torch.tensor(n_samples / (3 * counts), dtype=torch.float32).to(device)
 
 # ── 3. ConvBlock ─────────────────────────────────────────────────
 class ConvBlock(nn.Module):
@@ -90,6 +96,12 @@ class RegimeClassifier(nn.Module):
 
 # ── 5. 학습 루프 ─────────────────────────────────────────────────
 def train(
+    X_train,
+    y_train,
+    X_valid,
+    y_valid,
+    input_size:   int,
+    model_output: Path,
     n_epochs:    int   = 200,
     batch_size:  int   = 16,
     lr:          float = 3e-4,
@@ -106,7 +118,8 @@ def train(
         batch_size=batch_size, shuffle=False,
     )
 
-    model     = RegimeClassifier().to(device)
+    model     = RegimeClassifier(input_size=input_size).to(device)
+    class_weights = make_class_weights(y_train)
     criterion = nn.CrossEntropyLoss(weight=class_weights, label_smoothing=0.1)
     optimizer = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=1e-4)
 
@@ -179,14 +192,15 @@ def train(
 
     # best 모델 복원 후 저장
     model.load_state_dict(best_state)
-    torch.save(best_state, "outputs/models/best_model.pt")
-    print(f"\n모델 저장 완료: outputs/models/best_model.pt")
+    model_output.parent.mkdir(parents=True, exist_ok=True)
+    torch.save(best_state, model_output)
+    print(f"\n모델 저장 완료: {model_output}")
 
     return model, history
 
 
 # ── 6. 테스트셋 평가 ─────────────────────────────────────────────
-def evaluate(model):
+def evaluate(model, X_test, y_test):
     model.eval()
     X_t = torch.tensor(X_test).to(device)
     y_t = torch.tensor(y_test).to(device)
@@ -221,11 +235,41 @@ def evaluate(model):
 
 
 # ── 실행 ─────────────────────────────────────────────────────────
+def build_arg_parser():
+    parser = argparse.ArgumentParser(description="Train Conv1D+LSTM regime classifier")
+    parser.add_argument("--data", type=Path, default=Path("data/processed/spy_supervised_30d_5d.npz"))
+    parser.add_argument("--model-output", type=Path, default=Path("outputs/models/best_model.pt"))
+    parser.add_argument("--history-output", type=Path, default=Path("outputs/results/train_history.json"))
+    parser.add_argument("--epochs", type=int, default=200)
+    parser.add_argument("--batch-size", type=int, default=16)
+    parser.add_argument("--lr", type=float, default=3e-4)
+    parser.add_argument("--patience", type=int, default=25)
+    return parser
+
+
 if __name__ == "__main__":
+    args = build_arg_parser().parse_args()
     print(f"Device: {device}\n")
-    model, history = train()
-    acc, preds, probs = evaluate(model)
+    X_train, y_train, X_valid, y_valid, X_test, y_test = load_dataset(args.data)
+    input_size = X_train.shape[-1]
+    print(f"Dataset: {args.data}")
+    print(f"Shapes: train={X_train.shape}, valid={X_valid.shape}, test={X_test.shape}\n")
+
+    model, history = train(
+        X_train=X_train,
+        y_train=y_train,
+        X_valid=X_valid,
+        y_valid=y_valid,
+        input_size=input_size,
+        model_output=args.model_output,
+        n_epochs=args.epochs,
+        batch_size=args.batch_size,
+        lr=args.lr,
+        patience=args.patience,
+    )
+    acc, preds, probs = evaluate(model, X_test, y_test)
 
     # history 저장 (나중에 그래프 그릴 때 씀)
-    with open("outputs/results/train_history.json", "w") as f:
+    args.history_output.parent.mkdir(parents=True, exist_ok=True)
+    with args.history_output.open("w", encoding="utf-8") as f:
         json.dump(history, f)
