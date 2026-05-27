@@ -287,8 +287,8 @@ w_cash  = 1 - w_stock
 | Step 2: Conv1D 구현 | ✅ 완료 | `ConvBlock` — 파라미터 7,392개, MPS 동작 확인 |
 | Step 3: LSTM 연결 | ✅ 완료 | `RegimeClassifier` — 최종 ~31,300개 파라미터 |
 | Step 4: 학습 루프 | ✅ 완료 | Test Accuracy 58.1%, 상세 결과: `TRAINING_RESULTS.md` |
-| Step 5: 백테스트 | ✅ 완료 | Calmar 1.30~1.38 (1위), MDD 최저, 상세: `BACKTEST_RESULTS.md` |
-| 모델 개선 실험 | ✅ 완료 | 4개 실험, 최종 61.0% (Exp3), 상세: `MODEL_IMPROVEMENT.md` |
+| Step 5: 백테스트 | ✅ 완료 | Calmar 1.35 (1위), MDD -7.4%, 상세: `BACKTEST_RESULTS.md` |
+| 모델 개선 실험 | ✅ 완료 | 8개 실험 3단계, 최종 61.9% (Phase 3 Cross-asset), 상세: `MODEL_IMPROVEMENT.md` |
 | 시각화 | ✅ 완료 | 발표용 그래프 4개 (`data/processed/fig*.png`) |
 | 팀원용 요약 | ✅ 완료 | `FOR_TEAMMATES.md` |
 

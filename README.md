@@ -64,7 +64,7 @@ SPY + QQQ + GLD + TLT OHLCV (raw)
 │
 ├── outputs/
 │   ├── models/
-│   │   ├── best_model.pt              # 최종 모델 (Exp3)
+│   │   ├── best_model.pt              # 최종 모델 (Phase 3, seed=42)
 │   │   └── model_Exp*.pt              # 실험별 모델
 │   ├── figures/
 │   │   ├── fig1_experiment_comparison.png
@@ -162,35 +162,25 @@ python3 scripts/experiments.py    # 4개 실험 전체 비교
 | `--data` | `data/processed/spy_supervised_30d_5d.npz` | 학습할 데이터 파일 경로 |
 | `--model-output` | `outputs/models/best_model.pt` | 학습된 모델 저장 위치 |
 | `--history-output` | `outputs/results/train_history.json` | 학습 기록(loss/acc) 저장 위치 |
-| `--epochs` | `200` | 최대 학습 반복 횟수 |
+| `--epochs` | `80` | 최대 학습 반복 횟수 |
 | `--batch-size` | `16` | 한 번에 볼 샘플 수 |
-| `--lr` | `3e-4` | 학습률 (learning rate) |
-| `--patience` | `25` | 성능이 개선되지 않아도 기다릴 epoch 수 (early stopping) |
+| `--lr` | `1e-4` | 학습률 (learning rate) |
+| `--patience` | `10` | 성능이 개선되지 않아도 기다릴 epoch 수 (early stopping) |
+| `--optimizer` | `adamw` | 옵티마이저 선택 (`adam` / `adamw`) |
+| `--neutral-boost` | `1.5` | Neutral 클래스 가중치 배수 |
+| `--seed` | `42` | 랜덤 시드 고정 |
 
-#### 예시
+#### 최종 모델 재현 명령어
 
 ```bash
-# SPY 단일 자산 기본 학습
-python3 scripts/train.py
-
-# 교차 자산(SPY+QQQ+GLD+TLT) 피처로 학습
+# best_model.pt 재현 (Phase 3 최종 — Accuracy 61.9%)
 python3 scripts/train.py \
   --data data/processed/cross_asset_supervised_30d_5d.npz \
-  --model-output outputs/models/best_model_cross_asset.pt \
-  --history-output outputs/results/train_history_cross_asset.json
-
-# 다자산 라벨 데이터로 학습
-python3 scripts/train.py \
-  --data data/processed/multi_asset_supervised_30d_5d.npz \
-  --model-output outputs/models/best_model_multi_asset.pt \
-  --history-output outputs/results/train_history_multi_asset.json
-
-# 하이퍼파라미터 직접 지정
-python3 scripts/train.py \
-  --epochs 300 \
-  --batch-size 32 \
-  --lr 1e-4 \
-  --patience 50
+  --model-output outputs/models/best_model.pt \
+  --epochs 80 --patience 10 --batch-size 16 \
+  --lr 1e-4 --conv-channels 16 --lstm-hidden 32 \
+  --dropout 0.6 --weight-decay 1e-2 \
+  --neutral-boost 1.2 --best-metric val_bal_acc --seed 42
 ```
 
 ### [4] 백테스트 및 시각화
