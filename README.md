@@ -40,23 +40,28 @@ SPY + QQQ + GLD + TLT OHLCV (raw)
 │   │   ├── gld_daily.csv         # GLD OHLCV
 │   │   └── tlt_daily.csv         # TLT OHLCV
 │   └── processed/
-│       ├── spy_hmm_regime_labels.csv       # 월간 HMM 라벨 (176개)
-│       ├── spy_hmm_regime_labels_5d.csv    # 5거래일 HMM 라벨 (699개)
-│       ├── *_hmm_regime_labels_5d.csv      # 자산별 HMM 라벨
-│       ├── multi_asset_hmm_regime_labels_5d.csv # asset 컬럼 포함 통합 라벨
-│       ├── spy_supervised_30d_5d.npz       # SPY 단일 자산 학습 데이터셋 (698샘플, 30×10)
-│       ├── spy_supervised_30d_5d_index.csv # 샘플별 날짜 인덱스
-│       ├── spy_supervised_30d_5d_meta.json # 데이터셋 메타정보
-│       ├── cross_asset_supervised_30d_5d.npz # 교차 자산 피처 (698샘플, 30×40, SPY 라벨)
-│       ├── multi_asset_supervised_30d_5d.npz # 다자산 딥러닝 학습 데이터셋 (2792샘플)
+│       ├── spy_hmm_regime_labels_5d.csv         # SPY HMM 라벨 (699개, 2012~)
+│       ├── spy_hmm_regime_labels_5d_2004.csv    # SPY HMM 라벨 (1003개, 2006~)
+│       ├── spy_supervised_30d_5d.npz            # Phase 1: SPY 단일 (698샘플, 30×10)
+│       ├── spy_supervised_30d_5d_index.csv
+│       ├── spy_supervised_30d_5d_meta.json
+│       ├── cross_asset_supervised_30d_5d.npz    # Phase 3 최종: 4자산 (698샘플, 30×40)
+│       ├── cross_asset_supervised_30d_5d_index.csv
+│       ├── cross_asset_supervised_30d_5d_meta.json
+│       ├── multi_asset_supervised_30d_5d.npz    # Phase 2: 다자산 각자 라벨 (2792샘플)
 │       ├── multi_asset_supervised_30d_5d_index.csv
-│       └── multi_asset_supervised_30d_5d_meta.json
+│       ├── multi_asset_supervised_30d_5d_meta.json
+│       ├── paper23_monthly_hmm_labels.csv       # 팀원 monthly HMM 라벨 (23자산 통합)
+│       ├── paper_asset10_monthly_hmm_labels.csv
+│       └── paper_asset22_monthly_hmm_labels.csv
 │
 ├── scripts/
 │   ├── hmm_regime_labeling.py         # [1] 단일 자산 HMM 라벨 생성
 │   ├── generate_multi_asset_hmm_labels.py # [1-확장] 다자산 HMM 라벨 생성
 │   ├── prepare_supervised_dataset.py  # [2] 학습 데이터셋 생성
 │   ├── prepare_multi_asset_supervised_dataset.py # [2-확장] 다자산 학습 데이터셋 생성
+│   ├── prepare_cross_asset_dataset.py  # [2-Phase3] 교차 자산 피처 데이터셋 생성
+│   ├── prepare_paper_asset_dataset.py  # [2-확장] 논문 ETF 다자산 데이터셋 생성
 │   ├── train.py                       # [3] 모델 학습
 │   ├── experiments.py                 # [3] 4개 실험 비교
 │   ├── backtest.py                    # [4] 포트폴리오 백테스트
@@ -117,10 +122,8 @@ python3 scripts/generate_multi_asset_hmm_labels.py \
 
 출력:
 
-- `data/processed/{asset}_hmm_regime_labels_5d.csv`: 자산별 라벨
-- `data/processed/multi_asset_hmm_regime_labels_5d.csv`: `asset` 컬럼을 붙인 통합 라벨
-
-주의: 현재 `prepare_supervised_dataset.py`는 단일 `--raw`와 단일 `--labels`를 입력으로 받는다. 통합 라벨 CSV를 바로 넣으면 자산별 raw 데이터와 날짜가 섞이므로, 학습 데이터셋 확장 시에는 자산별 샘플을 만든 뒤 합치는 방식이 필요하다.
+- `data/processed/{asset}_hmm_regime_labels_5d.csv`: 자산별 라벨 (중간 산출물)
+- 자산별 라벨을 합쳐 `multi_asset_supervised_30d_5d.npz`로 패키징 (`prepare_multi_asset_supervised_dataset.py`)
 
 ### [2] 지도학습 데이터셋 생성 (팀원 담당)
 
@@ -230,6 +233,9 @@ w_cash  = 1 - w_stock
 | Phase 1 | Focal Loss + Augmentation | 61.0% | 46.5% | 33.3% | 90.2% |
 | Phase 2 | 4자산 각자 라벨 (10 피처) | 59.8% | 58.8% | 25.3% | 80.6% |
 | **Phase 3** | **Cross-asset 피처 + AdamW + Neutral-boost (최종)** | **61.9%** | **60.5%** | 0.0% | **95.1%** |
+| Phase 4 시도 | 15자산 확장 (150피처, 1002샘플) — 음성 결과 | 60.0% | 42.5% | — | — |
+
+> Phase 4는 자산 확장 실험이나 고차원 피처 과적합으로 Phase 3를 넘지 못함. 상세 내용은 [docs/MODEL_IMPROVEMENT.md](docs/MODEL_IMPROVEMENT.md) 참고.
 
 **최종 모델**: Cross-asset 피처(30×40) + AdamW + Neutral-boost 1.2, seed=42 고정, Accuracy **61.9%**
 
