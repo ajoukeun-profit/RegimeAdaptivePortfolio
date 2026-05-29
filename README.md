@@ -21,7 +21,7 @@ SPY + QQQ + GLD + TLT OHLCV (raw)
 [3] Conv1D + LSTM 학습   → 시장 국면 분류 모델 (Accuracy 61.9%)
       │                     AdamW + Neutral-boost + Balanced Accuracy 기준 저장
       ▼
-[4] 포트폴리오 백테스트   → Calmar Ratio 1.35 (전략 중 1위)
+[4] 포트폴리오 백테스트   → Regime Momentum Tilt 누적수익률 43.1%, Sharpe 1.08
 ```
 
 ---
@@ -64,7 +64,9 @@ SPY + QQQ + GLD + TLT OHLCV (raw)
 │   ├── prepare_paper_asset_dataset.py  # [2-확장] 논문 ETF 다자산 데이터셋 생성
 │   ├── train.py                       # [3] 모델 학습
 │   ├── experiments.py                 # [3] 4개 실험 비교
-│   ├── backtest.py                    # [4] 포트폴리오 백테스트
+│   ├── backtest.py                    # [4] 기존 SPY/Cash 포트폴리오 백테스트
+│   ├── backtest_regime_advanced.py    # [4-확장] 최종 다자산 리밸런싱 백테스트
+│   ├── regime_portfolio_policy.py     # [4-확장] Regime Momentum Tilt 비중 정책
 │   └── visualize.py                   # 발표용 그래프 생성
 │
 ├── outputs/
@@ -79,6 +81,8 @@ SPY + QQQ + GLD + TLT OHLCV (raw)
 │   └── results/
 │       ├── experiment_results.json
 │       ├── backtest_results.json
+│       ├── backtest_regime_momentum_results.json
+│       ├── backtest_regime_momentum_weights.csv
 │       └── train_history.json
 │
 └── docs/
@@ -190,6 +194,7 @@ python3 scripts/train.py \
 
 ```bash
 python3 scripts/backtest.py       # 전략별 성과 비교
+python3 scripts/backtest_regime_advanced.py  # 최종 Regime Momentum Tilt 백테스트
 python3 scripts/visualize.py      # 발표용 그래프 생성
 ```
 
@@ -215,11 +220,19 @@ Linear + Softmax
 - Balanced Accuracy 기준 best model 저장
 - Early stopping (patience=10)
 
-포트폴리오 비중 결정:
+기존 포트폴리오 비중 결정:
 ```
 w_stock = p_bull + 0.5 × p_neutral
 w_cash  = 1 - w_stock
 ```
+
+최종 리밸런싱 전략(`Regime Momentum Tilt`)은 국면 분류 모델을 수정하지 않고, 모델 확률을 SPY/QQQ/GLD/TLT/CASH 비중으로 변환한다.
+
+- 공격자산: SPY, QQQ
+- 방어자산: GLD, TLT, CASH
+- Bull/Neutral 확률과 추세가 양호하면 SPY/QQQ 비중 확대
+- Bear 확률, 추세 악화, SPY 낙폭 확대 시 GLD/TLT/CASH 비중 확대
+- 3~6개월 선행 신호는 최종 전략에서 사용하지 않음
 
 ---
 
@@ -245,12 +258,13 @@ w_cash  = 1 - w_stock
 
 | 전략 | 누적수익 | Sharpe | MDD | Calmar |
 |------|--------|--------|-----|--------|
-| Buy & Hold | 49.9% | 1.07 | -17.0% | 1.26 |
-| 60/40 | 28.3% | 0.84 | -10.4% | 1.22 |
-| MA Crossover | 29.1% | 0.82 | -10.9% | 1.19 |
-| **Conv1D+LSTM (ours)** | **21.9%** | 0.73 | **-7.4%** | **1.35** |
+| Buy & Hold SPY | 49.9% | 1.07 | -17.0% | 1.26 |
+| 60/40 SPY/Cash | 28.3% | 0.84 | -10.4% | 1.22 |
+| 60/40 SPY/TLT | 30.0% | 0.80 | -10.6% | 1.26 |
+| Current Conv1D+LSTM SPY/Cash | 21.9% | 0.73 | -7.4% | 1.35 |
+| **Regime Momentum Tilt (final)** | **43.1%** | **1.08** | **-12.9%** | **1.46** |
 
-테스트 기간이 강한 상승장(AI 붐, 미국 금리 인하)이어서 절대 수익률은 낮지만, **MDD -7.4%와 Calmar Ratio 1.35로 하락 방어 측면에서 모든 전략 중 1위**입니다.
+최종 전략은 기존 Conv1D+LSTM SPY/Cash 전략의 국면 예측 모델은 그대로 유지하고, 비중 결정만 다자산 리밸런싱으로 확장한 방식이다. 기존 21.9% 대비 누적수익률을 43.1%로 높였고, Sharpe도 0.73에서 1.08로 개선했다. 대신 MDD는 -7.4%에서 -12.9%로 커져, 수익률 개선을 위해 일부 하락 방어력을 포기한 전략이다.
 
 ---
 

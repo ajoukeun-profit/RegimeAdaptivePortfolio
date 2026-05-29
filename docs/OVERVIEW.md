@@ -231,16 +231,20 @@ y[0]       : 0        ← Bear (5거래일 후 국면이 Bear였음)
 
 ## 5. 포트폴리오 전략
 
-모델이 출력한 확률 [p_bear, p_neutral, p_bull]을 이용해 주식 비중을 결정한다.
+모델이 출력한 확률 [p_bear, p_neutral, p_bull]을 이용해 포트폴리오 비중을 결정한다.
 
 ```
 w_stock = p_bull + 0.5 × p_neutral   (상승 + 중립의 절반)
 w_cash  = 1 - w_stock
 ```
 
-- 이산적 전환(Bull이면 100% 주식)이 아닌 **확률 가중합**으로 급격한 비중 변화를 방지
+위 공식은 기존 SPY/Cash 전략이다. 최종 백테스트에서는 국면 분류 모델은 유지하고, 비중 결정 정책만 `Regime Momentum Tilt`로 확장했다.
+
+- 공격자산: SPY, QQQ
+- 방어자산: GLD, TLT, CASH
+- Bull/Neutral 확률과 추세가 좋으면 SPY/QQQ 비중 확대
+- Bear 우세, 추세 악화, 큰 낙폭이 발생하면 GLD/TLT/CASH 비중 확대
 - **5거래일마다 리밸런싱** (라벨 생성 주기와 동일)
-- 과도한 신호에 반응하지 않도록 rolling average smoothing 적용 예정
 
 ### Baseline 전략 (비교 대상)
 
@@ -287,7 +291,7 @@ w_cash  = 1 - w_stock
 | Step 2: Conv1D 구현 | ✅ 완료 | `ConvBlock` — 파라미터 7,392개, MPS 동작 확인 |
 | Step 3: LSTM 연결 | ✅ 완료 | `RegimeClassifier` — 최종 ~31,300개 파라미터 |
 | Step 4: 학습 루프 | ✅ 완료 | Test Accuracy 58.1%, 상세 결과: `TRAINING_RESULTS.md` |
-| Step 5: 백테스트 | ✅ 완료 | Calmar 1.35 (1위), MDD -7.4%, 상세: `BACKTEST_RESULTS.md` |
+| Step 5: 백테스트 | ✅ 완료 | Regime Momentum Tilt 누적수익률 43.1%, Sharpe 1.08, 상세: `BACKTEST_RESULTS.md` |
 | 모델 개선 실험 | ✅ 완료 | 8개 실험 3단계, 최종 61.9% (Phase 3 Cross-asset), 상세: `MODEL_IMPROVEMENT.md` |
 | 시각화 | ✅ 완료 | 발표용 그래프 4개 (`data/processed/fig*.png`) |
 | 팀원용 요약 | ✅ 완료 | `FOR_TEAMMATES.md` |
