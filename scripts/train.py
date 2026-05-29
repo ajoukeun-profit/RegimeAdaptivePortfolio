@@ -139,6 +139,24 @@ def compute_balanced_accuracy(cm):
     return float(np.mean(recalls)), recalls
 
 
+def compute_class_metrics(cm):
+    """Per-class Precision, Recall, F1 + Macro averages."""
+    n = cm.shape[0]
+    precisions, recalls, f1s = [], [], []
+    for i in range(n):
+        tp = cm[i, i]
+        fp = cm[:, i].sum() - tp
+        fn = cm[i, :].sum() - tp
+        p = tp / (tp + fp) if (tp + fp) > 0 else 0.0
+        r = tp / (tp + fn) if (tp + fn) > 0 else 0.0
+        f1 = 2 * p * r / (p + r) if (p + r) > 0 else 0.0
+        precisions.append(float(p))
+        recalls.append(float(r))
+        f1s.append(float(f1))
+    macro_f1 = float(np.mean(f1s))
+    return precisions, recalls, f1s, macro_f1
+
+
 # ─────────────────────────────────────────────────────────────
 # Model
 # ─────────────────────────────────────────────────────────────
@@ -535,12 +553,14 @@ def evaluate(model, X_test, y_test):
         num_classes=3,
     )
 
-    bal_acc, recalls = compute_balanced_accuracy(cm)
+    precisions, recalls, f1s, macro_f1 = compute_class_metrics(cm)
+    bal_acc = float(np.mean(recalls))
 
     print()
     print("=== Test Results ===")
     print(f"Accuracy         : {acc:.1%}")
-    print(f"Balanced Accuracy: {bal_acc:.1%}")
+    print(f"Balanced Accuracy: {bal_acc:.1%}  (macro Recall)")
+    print(f"Macro F1         : {macro_f1:.1%}")
     print()
 
     print(f"{'':10}", end="")
@@ -557,9 +577,12 @@ def evaluate(model, X_test, y_test):
     print("(actual)")
     print()
 
-    print("Per-class recall")
+    header = f"  {'Class':>7}  {'Precision':>9}  {'Recall':>6}  {'F1':>6}"
+    print(header)
+    print("  " + "-" * (len(header) - 2))
     for i, name in enumerate(label_names):
-        print(f"  {name:>7}: {recalls[i]:.1%}")
+        print(f"  {name:>7}  {precisions[i]:>9.1%}  {recalls[i]:>6.1%}  {f1s[i]:>6.1%}")
+    print(f"  {'Macro':>7}  {'':>9}  {bal_acc:>6.1%}  {macro_f1:>6.1%}")
 
     return acc, bal_acc, recalls, preds_np, probs.cpu().numpy(), cm
 
