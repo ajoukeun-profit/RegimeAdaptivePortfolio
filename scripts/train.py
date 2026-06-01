@@ -88,28 +88,26 @@ def load_dataset(path: Path):
     )
 
 
-def print_class_distribution(y_train, y_valid, y_test):
+def print_class_distribution(y_train, y_valid, y_test, num_classes: int = 3):
     print("Class distribution")
-    print("  labels: 0=Bear, 1=Neutral, 2=Bull")
-    print(f"  train: {np.bincount(y_train, minlength=3).tolist()}")
-    print(f"  valid: {np.bincount(y_valid, minlength=3).tolist()}")
-    print(f"  test : {np.bincount(y_test, minlength=3).tolist()}")
+    print(f"  train: {np.bincount(y_train, minlength=num_classes).tolist()}")
+    print(f"  valid: {np.bincount(y_valid, minlength=num_classes).tolist()}")
+    print(f"  test : {np.bincount(y_test, minlength=num_classes).tolist()}")
     print()
 
 
-def make_class_weights(y_train, neutral_boost: float = 1.0):
+def make_class_weights(y_train, num_classes: int = 3, neutral_boost: float = 1.0):
     n_samples = len(y_train)
-    counts = np.bincount(y_train, minlength=3).astype(np.float32)
+    counts = np.bincount(y_train, minlength=num_classes).astype(np.float32)
 
     if np.any(counts == 0):
-        raise ValueError(
-            f"All classes must appear in train split. Counts: {counts.tolist()}"
-        )
+        counts = np.where(counts == 0, 1.0, counts)   # 0 클래스 방지
 
-    weights = n_samples / (3.0 * counts)
+    weights = n_samples / (float(num_classes) * counts)
 
-    # class index 1 = Neutral
-    weights[1] *= neutral_boost
+    # 3-class일 때만 Neutral(index 1) boost
+    if num_classes == 3 and neutral_boost != 1.0:
+        weights[1] *= neutral_boost
 
     return torch.tensor(weights, dtype=torch.float32).to(device)
 
@@ -197,7 +195,7 @@ class RegimeClassifier(nn.Module):
         x: (batch, 30, input_size)
 
     Output:
-        logits: (batch, 3)
+        logits: (batch, num_classes)
     """
 
     def __init__(
@@ -208,10 +206,12 @@ class RegimeClassifier(nn.Module):
         lstm_layers: int = 1,
         dropout: float = 0.6,
         bidirectional: bool = False,
+        num_classes: int = 3,
     ):
         super().__init__()
 
         self.bidirectional = bidirectional
+        self.num_classes = num_classes
 
         self.conv = ConvBlock(
             in_channels=input_size,
@@ -235,7 +235,7 @@ class RegimeClassifier(nn.Module):
             nn.Linear(classifier_input_dim, 16),
             nn.ReLU(),
             nn.Dropout(dropout),
-            nn.Linear(16, 3),
+            nn.Linear(16, num_classes),
         )
 
     def forward(self, x):
@@ -297,6 +297,8 @@ def train(
         num_workers=0,
     )
 
+    num_classes = int(y_train.max()) + 1
+
     model = RegimeClassifier(
         input_size=input_size,
         conv_channels=conv_channels,
@@ -304,10 +306,12 @@ def train(
         lstm_layers=lstm_layers,
         dropout=dropout,
         bidirectional=bidirectional,
+        num_classes=num_classes,
     ).to(device)
 
     class_weights = make_class_weights(
         y_train=y_train,
+        num_classes=num_classes,
         neutral_boost=neutral_boost,
     )
 
@@ -435,7 +439,7 @@ def train(
         val_cm = compute_confusion_matrix(
             y_true=val_targets,
             y_pred=val_preds,
-            num_classes=3,
+            num_classes=num_classes,
         )
 
         val_bal_acc, val_recalls = compute_balanced_accuracy(val_cm)
@@ -449,8 +453,8 @@ def train(
         history["val_acc"].append(float(val_acc))
         history["val_bal_acc"].append(float(val_bal_acc))
         history["val_recall_bear"].append(float(val_recalls[0]))
-        history["val_recall_neutral"].append(float(val_recalls[1]))
-        history["val_recall_bull"].append(float(val_recalls[2]))
+        history["val_recall_neutral"].append(float(val_recalls[1]) if len(val_recalls) > 1 else 0.0)
+        history["val_recall_bull"].append(float(val_recalls[2]) if len(val_recalls) > 2 else 0.0)
         history["lr"].append(float(current_lr))
 
         if epoch % print_every == 0 or epoch == 1:
@@ -547,10 +551,11 @@ def evaluate(model, X_test, y_test):
 
     preds_np = preds.cpu().numpy()
 
+    num_classes = int(y_test.max()) + 1
     cm = compute_confusion_matrix(
         y_true=y_test,
         y_pred=preds_np,
-        num_classes=3,
+        num_classes=num_classes,
     )
 
     precisions, recalls, f1s, macro_f1 = compute_class_metrics(cm)
@@ -563,14 +568,15 @@ def evaluate(model, X_test, y_test):
     print(f"Macro F1         : {macro_f1:.1%}")
     print()
 
+    cls_names = label_names[:num_classes]
     print(f"{'':10}", end="")
-    for n in label_names:
+    for n in cls_names:
         print(f"  {n:>7}", end="")
     print("  (predicted)")
 
-    for i, row_name in enumerate(label_names):
+    for i, row_name in enumerate(cls_names):
         print(f"{row_name:10}", end="")
-        for j in range(3):
+        for j in range(num_classes):
             print(f"  {cm[i][j]:>7}", end="")
         print()
 
@@ -580,7 +586,7 @@ def evaluate(model, X_test, y_test):
     header = f"  {'Class':>7}  {'Precision':>9}  {'Recall':>6}  {'F1':>6}"
     print(header)
     print("  " + "-" * (len(header) - 2))
-    for i, name in enumerate(label_names):
+    for i, name in enumerate(cls_names):
         print(f"  {name:>7}  {precisions[i]:>9.1%}  {recalls[i]:>6.1%}  {f1s[i]:>6.1%}")
     print(f"  {'Macro':>7}  {'':>9}  {bal_acc:>6.1%}  {macro_f1:>6.1%}")
 
@@ -729,8 +735,8 @@ if __name__ == "__main__":
         "test_accuracy": float(acc),
         "test_balanced_accuracy": float(bal_acc),
         "test_recall_bear": float(recalls[0]),
-        "test_recall_neutral": float(recalls[1]),
-        "test_recall_bull": float(recalls[2]),
+        "test_recall_neutral": float(recalls[1]) if len(recalls) > 1 else 0.0,
+        "test_recall_bull": float(recalls[2]) if len(recalls) > 2 else 0.0,
         "test_confusion_matrix": cm.tolist(),
         "args": make_json_serializable(vars(args)),
     }

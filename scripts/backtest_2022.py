@@ -16,6 +16,7 @@ import numpy as np
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+from scipy.optimize import minimize
 import torch
 
 sys.path.insert(0, str(Path(__file__).parent))
@@ -49,9 +50,12 @@ PPY  = 252 / 5   # 5거래일 단위
 
 # ── 1. 데이터 로드 ────────────────────────────────────────────────
 data     = np.load("data/processed/cross_asset_supervised_30d_5d.npz", allow_pickle=True)
+X_train  = data["X_train"].astype(np.float32)
+y_train  = data["y_train"]
 X_valid  = data["X_valid"].astype(np.float32)
 
 rows_all   = list(csv.DictReader(open("data/processed/cross_asset_supervised_30d_5d_index.csv")))
+train_rows = [r for r in rows_all if r["split"] == "train"]
 valid_rows = [r for r in rows_all if r["split"] == "valid"]
 
 
@@ -102,6 +106,52 @@ ew_rets = np.array([
     )
     for r in rows_2022
 ])
+
+
+# ── 4-1. Regime-MVO 비중 계산 ────────────────────────────────────
+def returns_matrix(rows):
+    R = np.zeros((len(rows), len(ASSETS)))
+    for i, row in enumerate(rows):
+        for j, asset in enumerate(ASSETS):
+            R[i, j] = get_period_return(
+                prices_by_asset[asset],
+                row["input_end_date"],
+                row["target_date"],
+            )
+    return R
+
+
+RF_P = RF / PPY
+
+
+def max_sharpe_weights(R: np.ndarray, rf: float = RF_P) -> np.ndarray:
+    n_assets = R.shape[1]
+    w0 = np.ones(n_assets) / n_assets
+
+    def neg_sharpe(w):
+        port = R @ w
+        mu = port.mean() - rf
+        sig = port.std(ddof=0)
+        return -(mu / sig) if sig > 1e-8 else 0.0
+
+    result = minimize(
+        neg_sharpe,
+        w0,
+        method="SLSQP",
+        bounds=[(0.0, 1.0)] * n_assets,
+        constraints=[{"type": "eq", "fun": lambda w: w.sum() - 1}],
+        options={"ftol": 1e-9, "maxiter": 500},
+    )
+    return result.x if result.success else w0
+
+
+train_R = returns_matrix(train_rows)
+mvo_w = {rid: max_sharpe_weights(train_R[y_train == rid]) for rid in [0, 1, 2]}
+regime_mvo_weights = (
+    probs_2022[:, 0:1] * mvo_w[0]
+    + probs_2022[:, 1:2] * mvo_w[1]
+    + probs_2022[:, 2:3] * mvo_w[2]
+)
 
 
 # ── 5. Regime Momentum Tilt 비중 계산 ────────────────────────────
@@ -158,6 +208,31 @@ def rmt_metrics(weights: np.ndarray, name: str) -> dict:
             "_port_ret": rets}
 
 
+def mvo_metrics(weights: np.ndarray, name: str) -> dict:
+    rets = []
+    prev = np.zeros(weights.shape[1])
+    for w, row in zip(weights, rows_2022):
+        asset_rets = np.array([
+            get_period_return(prices_by_asset[a], row["input_end_date"], row["target_date"])
+            for a in ASSETS
+        ])
+        turnover = float(np.sum(np.abs(w - prev)))
+        rets.append(float(w @ asset_rets - turnover * COST))
+        prev = w
+    rets = np.array(rets)
+    cum     = float(np.prod(1 + rets) - 1)
+    ann_ret = float((1 + cum) ** (PPY / len(rets)) - 1)
+    ann_vol = float(rets.std() * np.sqrt(PPY))
+    sharpe  = float((ann_ret - RF) / ann_vol) if ann_vol > 0 else 0.0
+    curve   = np.cumprod(1 + rets)
+    mdd     = float((curve / np.maximum.accumulate(curve) - 1).min())
+    calmar  = float(ann_ret / abs(mdd)) if mdd < 0 else 0.0
+    return {"name": name, "cum": cum, "cum_ret": cum,
+            "ann_ret": ann_ret, "ann_vol": ann_vol,
+            "sharpe": sharpe, "mdd": mdd, "calmar": calmar,
+            "_port_ret": rets}
+
+
 def get_sma(end_date: str, window: int) -> float:
     idx = spy_dates.index(end_date) if end_date in spy_dates else -1
     if idx < window:
@@ -170,7 +245,8 @@ ma_weights = np.array([
     for r in rows_2022
 ])
 
-# 단순 SPY/Cash: Bull 확률 + Neutral 절반 → SPY 비중, 나머지 현금
+# 단순 SPY/Cash: classifier signal only, no MVO.
+# Bull 확률 + Neutral 절반 → SPY 비중, 나머지 현금
 w_spy_cash = probs_2022[:, 2] + 0.5 * probs_2022[:, 1]  # (n,)
 
 results = {
@@ -178,7 +254,8 @@ results = {
     "60/40":                     spy_metrics(np.full(n, 0.6),  spy_rets, "60/40"),
     "MA Crossover":              spy_metrics(ma_weights,       spy_rets, "MA Crossover"),
     "EW (1/N)":                  spy_metrics(np.ones(n),       ew_rets,  "EW (1/N)"),
-    "Conv1D+LSTM (SPY/Cash)":    spy_metrics(w_spy_cash,       spy_rets, "Conv1D+LSTM (SPY/Cash)"),
+    "DL Regime SPY/Cash":        spy_metrics(w_spy_cash,       spy_rets, "DL Regime SPY/Cash"),
+    "Regime-MVO (ours)":         mvo_metrics(regime_mvo_weights, "Regime-MVO (ours)"),
     "Regime Momentum Tilt":      rmt_metrics(rmt_weights, "Regime Momentum Tilt"),
 }
 
@@ -212,7 +289,8 @@ style = {
     "60/40":                     ("#95A5A6", "--", 1.2),
     "MA Crossover":              ("#8E44AD", ":",  1.2),
     "EW (1/N)":                  ("#27AE60", "--", 1.5),
-    "Conv1D+LSTM (SPY/Cash)":    ("#2980B9", "-",  2.8),
+    "DL Regime SPY/Cash":        ("#2980B9", "-",  2.8),
+    "Regime-MVO (ours)":         ("#E74C3C", "-",  2.4),
     "Regime Momentum Tilt":      ("#E67E22", "-",  1.8),
 }
 
@@ -227,7 +305,7 @@ dates_axis = [r["target_date"] for r in rows_2022]
 for name, m in results.items():
     color, ls, lw = style[name]
     curve = np.concatenate([[1.0], np.cumprod(1 + m["_port_ret"])])
-    lbl = f"{name} ◀" if "SPY/Cash" in name else name
+    lbl = f"{name} ◀" if name == "Regime-MVO (ours)" else name
     ax1.plot(range(len(curve)), (curve - 1) * 100,
              color=color, linestyle=ls, linewidth=lw, label=lbl)
 
@@ -242,9 +320,12 @@ ax1.legend(fontsize=9)
 
 # MDD 막대
 names_order = list(results.keys())
-short_names = ["Buy &\nHold", "60/40", "MA\nCrossover", "EW\n1/N", "SPY/Cash\n(ours) ◀", "Regime\nTilt"]
+short_names = [
+    "Buy &\nHold", "60/40", "MA\nCrossover", "EW\n1/N",
+    "DL Regime\nSPY/Cash", "Regime-\nMVO ◀", "Regime\nTilt",
+]
 mdds = [abs(results[n]["mdd"]) * 100 for n in names_order]
-bar_colors = ["#2980B9" if "SPY/Cash" in n else "#E67E22" if "Regime" in n
+bar_colors = ["#E74C3C" if "Regime-MVO" in n else "#2980B9" if "DL Regime" in n else "#E67E22" if "Regime" in n
               else "#27AE60" if "EW" in n else "#95A5A6"
               for n in names_order]
 

@@ -90,7 +90,7 @@ Linear + Softmax
 | EW 1/N (논문 벤치마크) | 50.9% | 1.41 | -8.8% | 2.47 |
 | 60/40 | 28.3% | 0.84 | -10.4% | 1.22 |
 | MA Crossover | 29.1% | 0.82 | -10.9% | 1.19 |
-| Conv1D+LSTM SPY/Cash | 21.9% | 0.73 | -7.4% | 1.35 |
+| DL Regime SPY/Cash | 21.9% | 0.73 | -7.4% | 1.35 |
 | Regime Momentum Tilt | 43.1% | 1.08 | -12.9% | 1.46 |
 | **Regime-MVO (최종)** | **35.3%** | **1.10** | **-7.2%** | **2.16** |
 
@@ -104,9 +104,10 @@ Linear + Softmax
 | EW 1/N | -21.7% |
 | MA Crossover | -20.8% |
 | 60/40 | -12.5% |
-| **Conv1D+LSTM SPY/Cash** | **-10.5%** |
+| **DL Regime SPY/Cash** | **-10.5%** |
+| Regime-MVO (최종) | -22.2% |
 
-> 2022년(주식·채권 동반 하락)에서 SPY/Cash 전략이 낙폭 49% 감소.
+> 2022년(주식·채권 동반 하락)에서는 현금 비중을 둘 수 있는 SPY/Cash 전략이 낙폭 49%를 줄였다. 반면 Regime-MVO는 Bear 비중이 TLT에 집중되어 금리인상형 Bear에 취약했다.
 
 ---
 
@@ -114,13 +115,14 @@ Linear + Softmax
 
 | 그림 | 내용 |
 |---|---|
-| [fig1](outputs/figures/fig1_experiment_comparison.png) | Phase별 분류 성능 비교 |
-| [fig2](outputs/figures/fig2_cumulative_return.png) | 전략별 누적 수익률 (2024~2026) |
-| [fig3](outputs/figures/fig3_strategy_metrics.png) | Sharpe / MDD / Calmar 비교 |
-| [fig4](outputs/figures/fig4_confusion_matrix.png) | Confusion Matrix (Phase 3 최종) |
-| [fig5](outputs/figures/fig5_2022_bear_backtest.png) | 2022 하락장 백테스트 |
-| [fig6](outputs/figures/fig6_market_comparison.png) | 하락장 vs 상승장 비교 |
-| [fig7](outputs/figures/fig7_mvo_comparison.png) | Regime-MVO vs 기타 전략 비교 |
+| [fig01](outputs/figures/final/fig01_pipeline.png) | HMM → Conv1D+LSTM → Regime-MVO 파이프라인 |
+| [fig02](outputs/figures/final/fig02_related_work.png) | 관련 연구 비교 |
+| [fig03](outputs/figures/final/fig03_main_result.png) | 핵심 결과: MDD / Calmar 비교 |
+| [fig04](outputs/figures/final/fig04_classification_performance.png) | Phase별 분류 성능 비교 |
+| [fig05](outputs/figures/final/fig05_confusion_matrix.png) | Confusion Matrix (Phase 3 최종) |
+| [fig06](outputs/figures/final/fig06_regime_conditional.png) | Bear / Neutral / Bull 구간별 전략 성과 |
+| [fig07](outputs/figures/final/fig07_ablation.png) | Ablation: 구성요소별 기여 |
+| [fig08](outputs/figures/final/fig08_2022_bear.png) | 2022 하락장 검증 |
 
 ---
 
@@ -206,7 +208,7 @@ python3 scripts/visualize_comparison.py
 
 ## 한계 및 향후 연구
 
-- **Neutral Recall 0%**: 중립 구간 레이블 불명확 → 2-class(Bear vs Non-Bear) 전환 고려
+- **Neutral Recall 0%**: 중립 구간 레이블 불명확 → 라벨 정의 및 표본 확장 개선 필요
 - **698샘플**: 금융 시계열 구조적 한계 (14년 × 5일 단위) → 일별 sliding으로 ~3,500샘플 확장 가능
 - **파라미터 최적화**: MVO 계수를 Sharpe 직접 최대화로 도출 (완료) → end-to-end 학습으로 확장 가능
 - **2022 환경**: 금리인상 Bear에서 TLT도 폭락 → 방어 자산을 단기채/MMF로 교체 필요

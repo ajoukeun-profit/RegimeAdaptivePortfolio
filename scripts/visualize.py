@@ -45,48 +45,67 @@ device = (
 
 
 # ══════════════════════════════════════════════════════════════════
-# Fig 1. 3단계 실험별 분류 성능 비교
+# Fig 1. 논문 스타일 분류 성능 비교 표
 # ══════════════════════════════════════════════════════════════════
-# Phase 1: SPY 단독 (대표 2개)
-# Phase 2: 4자산 각자 라벨 (대표 1개)
-# Phase 3: Cross-asset + AdamW + Neutral-boost (최종)
-exp_names  = [
-    "Ph1\nBaseline",
-    "Ph1\nAugment",
-    "Ph2\nMulti-label",
-    "Ph3\nCross-asset\n(최종)",
+fig, ax = plt.subplots(figsize=(13, 4.2))
+ax.axis("off")
+
+col_labels = ["Experiment", "Architecture", "Accuracy", "Bear\nRecall", "Neutral\nRecall", "Bull\nRecall"]
+row_data = [
+    ["Ph1  Baseline",            "Conv1D+LSTM  (SPY, 10 features)",              "57.1%", "34.9%", "23.8%", "97.6%"],
+    ["Ph1  Augmentation",        "Conv1D+LSTM  (SPY, augmented)",                "61.0%", "46.5%", "33.3%", "90.2%"],
+    ["Ph2  Multi-asset labels",  "Conv1D+LSTM  (4-asset ind. labels)",           "59.8%", "58.8%", "25.3%", "80.6%"],
+    ["Ph3  Cross-asset + AdamW ★","Conv1D+LSTM  (4-asset shared label, final)",  "61.9%", "60.5%",  "0.0%", "95.1%"],
 ]
-accuracy   = [57.1, 61.0, 59.8, 61.9]
-bear_acc   = [34.9, 46.5, 58.8, 60.5]
-neutral_acc= [23.8, 33.3, 25.3,  0.0]
-bull_acc   = [97.6, 90.2, 80.6, 95.1]
 
-x     = np.arange(len(exp_names))
-width = 0.2
+table = ax.table(
+    cellText=row_data,
+    colLabels=col_labels,
+    cellLoc="center",
+    loc="center",
+    bbox=[0, 0.18, 1, 0.78],
+)
+table.auto_set_font_size(False)
+table.set_fontsize(9.5)
 
-fig, ax = plt.subplots(figsize=(11, 5))
-b1 = ax.bar(x - 1.5*width, accuracy,    width, label="Overall Accuracy", color=COLORS["model"],   alpha=0.9)
-b2 = ax.bar(x - 0.5*width, bear_acc,    width, label="Bear Recall",      color=COLORS["bear"],    alpha=0.8)
-b3 = ax.bar(x + 0.5*width, neutral_acc, width, label="Neutral Recall",   color=COLORS["neutral"], alpha=0.8)
-b4 = ax.bar(x + 1.5*width, bull_acc,    width, label="Bull Recall",      color=COLORS["bull"],    alpha=0.8)
+# 헤더 스타일
+for j in range(len(col_labels)):
+    cell = table[0, j]
+    cell.set_facecolor("#2C3E50")
+    cell.set_text_props(color="white", fontweight="bold")
+    cell.set_height(0.28)
 
-for bar in b1:
-    ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 0.8,
-            f"{bar.get_height():.1f}%", ha="center", va="bottom", fontsize=8, fontweight="bold")
+# 행 스타일
+for i in range(1, 5):
+    for j in range(len(col_labels)):
+        cell = table[i, j]
+        if i == 4:  # 최종 행 강조
+            cell.set_facecolor("#EBF5FB")
+            cell.set_text_props(fontweight="bold")
+        else:
+            cell.set_facecolor("#FAFAFA" if i % 2 == 0 else "white")
+        # Bear Recall 열 (j=3) 색상
+        if j == 3 and i > 0:
+            cell.set_text_props(color="#E74C3C", fontweight="bold")
+        cell.set_height(0.22)
 
-ax.set_xticks(x)
-ax.set_xticklabels(exp_names, fontsize=9)
-ax.set_ylabel("Accuracy (%)")
-ax.set_title("Phase별 분류 성능 비교 (대표 실험)", fontsize=13, fontweight="bold", pad=12)
-ax.set_ylim(0, 115)
-ax.legend(loc="upper right", fontsize=9)
-ax.axhline(33.3, color="gray", linestyle="--", linewidth=0.8, alpha=0.6)
-ax.text(3.7, 34.5, "Random\n33.3%", fontsize=7, color="gray")
+table.auto_set_column_width([0, 1, 2, 3, 4, 5])
 
-# Phase 3 강조
-ax.axvspan(2.6, 3.4, alpha=0.06, color=COLORS["model"])
+ax.set_title(
+    "Table 1.  Classification Performance by Experimental Phase",
+    fontsize=12, fontweight="bold", pad=6, y=0.98
+)
 
-plt.tight_layout()
+# 메트릭 설명
+notes = (
+    "† Accuracy: overall correct / total samples.   "
+    "Recall (per class) = TP / all actual positives in that class  "
+    "(higher = better for Bear).   Random baseline: 33.3% per class.\n"
+    "Bear Recall is the primary optimization target — early detection of downturns drives portfolio protection."
+)
+fig.text(0.5, 0.04, notes, ha="center", fontsize=8, style="italic", color="#555555",
+         bbox=dict(boxstyle="round,pad=0.4", facecolor="#F8F9FA", edgecolor="#BDC3C7", alpha=0.8))
+
 plt.savefig("outputs/figures/fig1_experiment_comparison.png", bbox_inches="tight")
 plt.close()
 print("Fig1 저장")
@@ -215,11 +234,11 @@ style = {
     "60/40":                         ("--", COLORS["gray"], 1.2),
     "MA Crossover":                  (":",  "#8E44AD", 1.2),
     "EW 1/N (논문 벤치마크)":         ("--", "#27AE60", 1.5),
-    "Conv1D+LSTM (SPY/Cash)":        ("-",  "#2980B9", 2.0),
+    "DL Regime SPY/Cash":            ("-",  "#2980B9", 2.0),
     "Regime Momentum Tilt (ours)":   ("-",  "#E67E22", 2.5),
 }
 
-# Conv1D+LSTM SPY/Cash 누적 수익률: p_bull + 0.5*p_neutral → SPY 비중, 나머지 현금
+# DL Regime SPY/Cash 누적 수익률: p_bull + 0.5*p_neutral → SPY 비중, 나머지 현금
 lstm_spy_cash_curve = np.concatenate([[1.0], cumulative_curve(w_model, holding_returns)])
 
 fig, ax = plt.subplots(figsize=(12, 5))
@@ -231,10 +250,10 @@ for name, weights in strategies.items():
 # EW
 ax.plot(range(len(ew_curve)), (ew_curve - 1) * 100,
         linestyle="--", color="#27AE60", linewidth=1.5, label="EW 1/N (논문 벤치마크)")
-# Conv1D+LSTM SPY/Cash
-ls, color, lw = style["Conv1D+LSTM (SPY/Cash)"]
+# DL Regime SPY/Cash
+ls, color, lw = style["DL Regime SPY/Cash"]
 ax.plot(range(len(lstm_spy_cash_curve)), (lstm_spy_cash_curve - 1) * 100,
-        linestyle=ls, color=color, linewidth=lw, label="Conv1D+LSTM (SPY/Cash)")
+        linestyle=ls, color=color, linewidth=lw, label="DL Regime SPY/Cash")
 # Regime Momentum Tilt
 ls, color, lw = style["Regime Momentum Tilt (ours)"]
 ax.plot(range(len(rmt_cum)), (rmt_cum - 1) * 100,
@@ -258,45 +277,70 @@ print("Fig2 저장")
 
 
 # ══════════════════════════════════════════════════════════════════
-# Fig 3. 전략별 위험-수익 비교 (Sharpe, MDD, Calmar)
+# Fig 3. 전략별 위험-수익 비교 (Sharpe, MDD, Calmar) — 최종 7개 전략
 # ══════════════════════════════════════════════════════════════════
+with open("outputs/results/backtest_mvo_results.json") as f:
+    bt_mvo = json.load(f)
 with open("outputs/results/backtest_results.json") as f:
     bt = json.load(f)
 with open("outputs/results/backtest_regime_momentum_results.json") as f:
     bt_rmt = json.load(f)
 
-rmt_data = bt_rmt["Regime Momentum Tilt"]
-strat_order = ["Buy & Hold", "EW (1/N)", "60/40", "80/20", "40/60",
-               "MA Crossover", "Vol Targeting", "Regime Momentum Tilt (ours)"]
-all_data = {**bt, "Regime Momentum Tilt (ours)": rmt_data}
-sharpes  = [all_data[s]["sharpe"]         for s in strat_order]
-mdds     = [abs(all_data[s]["mdd"]) * 100 for s in strat_order]
-calmars  = [all_data[s]["calmar"]         for s in strat_order]
-bar_colors = ["#E67E22" if "Regime" in s else "#27AE60" if "EW" in s else COLORS["gray"] for s in strat_order]
+all_data_fig3 = {
+    "Buy & Hold":             bt_mvo["Buy & Hold"],
+    "EW 1/N":                 bt_mvo["EW 1/N"],
+    "60/40":                  bt_mvo["60/40"],
+    "MA Crossover":           bt["MA Crossover"],
+    "DL Regime\nSPY/Cash":   bt_mvo["DL Regime SPY/Cash"],
+    "Regime Tilt":            bt_rmt["Regime Momentum Tilt"],
+    "Regime-MVO ★\n(ours)":   bt_mvo["Regime-MVO (ours)"],
+}
+strat_order3 = list(all_data_fig3.keys())
+sharpes3  = [all_data_fig3[s]["sharpe"]         for s in strat_order3]
+mdds3     = [abs(all_data_fig3[s]["mdd"]) * 100 for s in strat_order3]
+calmars3  = [all_data_fig3[s]["calmar"]         for s in strat_order3]
 
-fig, axes = plt.subplots(1, 3, figsize=(14, 5))
-fig.suptitle("Strategy Comparison: Risk-Adjusted Metrics", fontsize=13, fontweight="bold")
+def bar_color3(name):
+    if "Regime-MVO" in name:  return "#E74C3C"
+    if "Regime Tilt" in name: return "#E67E22"
+    if "EW" in name:          return "#27AE60"
+    if "DL Regime" in name:   return "#2980B9"
+    return COLORS["gray"]
 
-short_names = [s.replace("Regime Momentum Tilt (ours)", "Regime Tilt ◀").replace("EW (1/N)", "EW 1/N") for s in strat_order]
+colors3 = [bar_color3(s) for s in strat_order3]
+
+fig, axes = plt.subplots(1, 3, figsize=(15, 5))
+fig.suptitle("Strategy Comparison: Risk-Adjusted Metrics  (Test: 2024.04 ~ 2026.05)",
+             fontsize=13, fontweight="bold")
 
 for ax, values, title, higher_better in zip(
     axes,
-    [sharpes, mdds, calmars],
+    [sharpes3, mdds3, calmars3],
     ["Sharpe Ratio\n(higher = better)", "Max Drawdown (%)\n(lower = better)", "Calmar Ratio\n(higher = better)"],
-    [True, False, True]
+    [True, False, True],
 ):
-    bars = ax.barh(short_names, values, color=bar_colors, alpha=0.85)
+    bars = ax.barh(strat_order3, values, color=colors3, alpha=0.85)
     best_val = min(values) if not higher_better else max(values)
     best_idx = values.index(best_val)
     bars[best_idx].set_edgecolor("gold")
     bars[best_idx].set_linewidth(2.5)
-
     for bar, val in zip(bars, values):
         ax.text(val + max(values) * 0.01, bar.get_y() + bar.get_height() / 2,
-                f"{val:.2f}", va="center", fontsize=8)
+                f"{val:.2f}", va="center", fontsize=8.5)
     ax.set_title(title, fontsize=10, fontweight="bold")
 
-plt.tight_layout()
+import matplotlib.patches as mpatches
+leg_handles = [
+    mpatches.Patch(color="#E74C3C", label="Regime-MVO (ours)"),
+    mpatches.Patch(color="#E67E22", label="Regime Momentum Tilt"),
+    mpatches.Patch(color="#2980B9", label="DL Regime SPY/Cash"),
+    mpatches.Patch(color="#27AE60", label="EW 1/N"),
+    mpatches.Patch(color=COLORS["gray"], label="기타 전략"),
+]
+fig.legend(handles=leg_handles, loc="lower center", ncol=5, fontsize=8.5,
+           bbox_to_anchor=(0.5, -0.02), framealpha=0.9)
+
+plt.tight_layout(rect=[0, 0.05, 1, 1])
 plt.savefig("outputs/figures/fig3_strategy_metrics.png", bbox_inches="tight")
 plt.close()
 print("Fig3 저장")

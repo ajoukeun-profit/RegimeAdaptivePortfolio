@@ -196,7 +196,7 @@ def main() -> None:
         "Buy & Hold SPY": build_static_weights(len(test_rows), [1.0, 0.0, 0.0, 0.0, 0.0]),
         "60/40 SPY/Cash": build_static_weights(len(test_rows), [0.60, 0.0, 0.0, 0.0, 0.40]),
         "60/40 SPY/TLT": build_static_weights(len(test_rows), [0.60, 0.0, 0.0, 0.40, 0.0]),
-        "Current Conv1D+LSTM SPY/Cash": build_current_model_weights(probs),
+        "DL Regime SPY/Cash": build_current_model_weights(probs),
         "Regime Momentum Tilt": build_return_seeking_weights(probs, prices, test_rows),
     }
 

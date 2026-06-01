@@ -111,7 +111,7 @@ w_strategies["Buy & Hold"]          = np.ones(105)
 w_strategies["60/40"]               = np.full(105, 0.60)
 w_strategies["80/20"]               = np.full(105, 0.80)
 w_strategies["40/60"]               = np.full(105, 0.40)
-w_strategies["Conv1D+LSTM (ours)"]  = w_model
+w_strategies["DL Regime SPY/Cash"]  = w_model
 # EW는 별도 수익률 계산 (4자산 1/N) → weight=1로 고정
 w_strategies["EW (1/N)"]            = np.ones(105)
 
@@ -192,10 +192,10 @@ print(header)
 print("─" * 74)
 
 order = ["Buy & Hold", "EW (1/N)", "60/40", "80/20", "40/60",
-         "MA Crossover", "Vol Targeting", "Conv1D+LSTM (ours)"]
+         "MA Crossover", "Vol Targeting", "DL Regime SPY/Cash"]
 for name in order:
     m = results[name]
-    marker = " ◀" if name == "Conv1D+LSTM (ours)" else ""
+    marker = " ◀" if name == "DL Regime SPY/Cash" else ""
     print(f"{name:<22} {m['cum_ret']:>7.1%}  {m['ann_ret']:>6.1%}  "
           f"{m['ann_vol']:>6.1%}  {m['sharpe']:>6.2f}  {m['mdd']:>7.1%}  "
           f"{m['calmar']:>6.2f}{marker}")
