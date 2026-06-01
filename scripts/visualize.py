@@ -181,15 +181,40 @@ def rmt_curve(wt_rows_list, rmt_w, spy_p, qqq_p, gld_p, tlt_p, cost=0.001):
 
 rmt_cum = rmt_curve(wt_rows, rmt_weights, spy_prices, qqq_prices, gld_prices, tlt_prices)
 
+# EW 수익률 계산 (4자산 1/N: SPY/QQQ/GLD/TLT)
+def load_prices_vis(path):
+    d = {}
+    with open(path) as f:
+        for row in csv.DictReader(f):
+            d[row["Date"]] = float(row["Adj Close"])
+    return d
+
+qqq_prices_v = load_prices_vis("data/raw/qqq_daily.csv")
+gld_prices_v = load_prices_vis("data/raw/gld_daily.csv")
+tlt_prices_v = load_prices_vis("data/raw/tlt_daily.csv")
+
+def asset_ret(prices, d0, d1):
+    return prices[d1] / prices[d0] - 1.0 if d0 in prices and d1 in prices else 0.0
+
+ew_holding = np.array([
+    0.25 * asset_ret(spy_prices, r["input_end_date"], r["target_date"])
+    + 0.25 * asset_ret(qqq_prices_v, r["input_end_date"], r["target_date"])
+    + 0.25 * asset_ret(gld_prices_v, r["input_end_date"], r["target_date"])
+    + 0.25 * asset_ret(tlt_prices_v, r["input_end_date"], r["target_date"])
+    for r in test_rows
+])
+ew_curve = np.concatenate([[1.0], np.cumprod(1 + ew_holding)])
+
 strategies = {
-    "Buy & Hold":              np.ones(n),
-    "60/40":                   np.full(n, 0.6),
-    "MA Crossover":            np.array(ma_weights),
+    "Buy & Hold":   np.ones(n),
+    "60/40":        np.full(n, 0.6),
+    "MA Crossover": np.array(ma_weights),
 }
 style = {
     "Buy & Hold":                    ("--", "#2C3E50", 1.5),
     "60/40":                         ("--", COLORS["gray"], 1.2),
     "MA Crossover":                  (":",  "#8E44AD", 1.2),
+    "EW 1/N (논문 벤치마크)":         ("--", "#27AE60", 1.5),
     "Regime Momentum Tilt (ours)":   ("-",  "#E67E22", 2.5),
 }
 
@@ -199,7 +224,10 @@ for name, weights in strategies.items():
     ls, color, lw = style[name]
     ax.plot(range(len(curve)), (curve - 1) * 100,
             linestyle=ls, color=color, linewidth=lw, label=name)
-# 최종 전략 (Regime Momentum Tilt)
+# EW
+ax.plot(range(len(ew_curve)), (ew_curve - 1) * 100,
+        linestyle="--", color="#27AE60", linewidth=1.5, label="EW 1/N (논문 벤치마크)")
+# 최종 전략
 ls, color, lw = style["Regime Momentum Tilt (ours)"]
 ax.plot(range(len(rmt_cum)), (rmt_cum - 1) * 100,
         linestyle=ls, color=color, linewidth=lw, label="Regime Momentum Tilt (ours)")
@@ -230,18 +258,18 @@ with open("outputs/results/backtest_regime_momentum_results.json") as f:
     bt_rmt = json.load(f)
 
 rmt_data = bt_rmt["Regime Momentum Tilt"]
-strat_order = ["Buy & Hold", "80/20", "60/40", "MA Crossover",
-               "Vol Targeting", "40/60", "Regime Momentum Tilt (ours)"]
+strat_order = ["Buy & Hold", "EW (1/N)", "60/40", "80/20", "40/60",
+               "MA Crossover", "Vol Targeting", "Regime Momentum Tilt (ours)"]
 all_data = {**bt, "Regime Momentum Tilt (ours)": rmt_data}
 sharpes  = [all_data[s]["sharpe"]         for s in strat_order]
 mdds     = [abs(all_data[s]["mdd"]) * 100 for s in strat_order]
 calmars  = [all_data[s]["calmar"]         for s in strat_order]
-bar_colors = ["#E67E22" if "Regime" in s else COLORS["gray"] for s in strat_order]
+bar_colors = ["#E67E22" if "Regime" in s else "#27AE60" if "EW" in s else COLORS["gray"] for s in strat_order]
 
 fig, axes = plt.subplots(1, 3, figsize=(14, 5))
 fig.suptitle("Strategy Comparison: Risk-Adjusted Metrics", fontsize=13, fontweight="bold")
 
-short_names = [s.replace("Regime Momentum Tilt (ours)", "Regime Tilt ◀") for s in strat_order]
+short_names = [s.replace("Regime Momentum Tilt (ours)", "Regime Tilt ◀").replace("EW (1/N)", "EW 1/N") for s in strat_order]
 
 for ax, values, title, higher_better in zip(
     axes,

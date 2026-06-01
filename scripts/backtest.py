@@ -28,11 +28,18 @@ X_test = torch.tensor(data["X_test"].astype(np.float32)).to(device)
 index_rows = list(csv.DictReader(open("data/processed/cross_asset_supervised_30d_5d_index.csv")))
 test_rows  = [r for r in index_rows if r["split"] == "test"]   # 105개
 
-# SPY 일별 가격 (Adj Close)
-spy_prices = {}   # {date_str: adj_close}
-with open("data/raw/spy_daily.csv") as f:
-    for row in csv.DictReader(f):
-        spy_prices[row["Date"]] = float(row["Adj Close"])
+# 자산별 일별 가격 (Adj Close)
+def load_prices(path):
+    d = {}
+    with open(path) as f:
+        for row in csv.DictReader(f):
+            d[row["Date"]] = float(row["Adj Close"])
+    return d
+
+spy_prices = load_prices("data/raw/spy_daily.csv")
+qqq_prices = load_prices("data/raw/qqq_daily.csv")
+gld_prices = load_prices("data/raw/gld_daily.csv")
+tlt_prices = load_prices("data/raw/tlt_daily.csv")
 
 spy_dates  = sorted(spy_prices.keys())
 
@@ -63,6 +70,20 @@ for r in test_rows:
     holding_returns.append(ret)
 holding_returns = np.array(holding_returns)   # (105,)
 
+# EW 포트폴리오 수익률: SPY/QQQ/GLD/TLT 1/N 동일 비중
+def get_asset_return(prices, start, end):
+    if start not in prices or end not in prices:
+        return 0.0
+    return prices[end] / prices[start] - 1.0
+
+ew_returns = np.array([
+    0.25 * get_asset_return(spy_prices, r["input_end_date"], r["target_date"])
+    + 0.25 * get_asset_return(qqq_prices, r["input_end_date"], r["target_date"])
+    + 0.25 * get_asset_return(gld_prices, r["input_end_date"], r["target_date"])
+    + 0.25 * get_asset_return(tlt_prices, r["input_end_date"], r["target_date"])
+    for r in test_rows
+])
+
 # 해당 기간 SPY 변동성 (20일 rolling → 연율화, baseline용)
 def get_rolling_vol(end_date: str, window: int = 20) -> float:
     idx = spy_dates.index(end_date) if end_date in spy_dates else -1
@@ -91,6 +112,8 @@ w_strategies["60/40"]               = np.full(105, 0.60)
 w_strategies["80/20"]               = np.full(105, 0.80)
 w_strategies["40/60"]               = np.full(105, 0.40)
 w_strategies["Conv1D+LSTM (ours)"]  = w_model
+# EW는 별도 수익률 계산 (4자산 1/N) → weight=1로 고정
+w_strategies["EW (1/N)"]            = np.ones(105)
 
 # MA Crossover: SMA20 > SMA60 → 전액 주식, 아니면 전액 현금
 ma_weights = []
@@ -157,7 +180,8 @@ def compute_metrics(weights: np.ndarray, holding_rets: np.ndarray, name: str) ->
 # ── 6. 결과 출력 ─────────────────────────────────────────────────
 results = {}
 for name, weights in w_strategies.items():
-    results[name] = compute_metrics(weights, holding_returns, name)
+    rets = ew_returns if name == "EW (1/N)" else holding_returns
+    results[name] = compute_metrics(weights, rets, name)
 
 # 테이블 출력
 header = f"{'전략':<22} {'누적수익':>8} {'연수익':>7} {'변동성':>7} {'Sharpe':>7} {'MDD':>8} {'Calmar':>7}"
@@ -167,7 +191,7 @@ print(f"{'='*74}")
 print(header)
 print("─" * 74)
 
-order = ["Buy & Hold", "60/40", "80/20", "40/60",
+order = ["Buy & Hold", "EW (1/N)", "60/40", "80/20", "40/60",
          "MA Crossover", "Vol Targeting", "Conv1D+LSTM (ours)"]
 for name in order:
     m = results[name]
