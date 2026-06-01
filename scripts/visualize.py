@@ -185,14 +185,12 @@ strategies = {
     "Buy & Hold":              np.ones(n),
     "60/40":                   np.full(n, 0.6),
     "MA Crossover":            np.array(ma_weights),
-    "Conv1D+LSTM (ours)":      w_model,
 }
 style = {
-    "Buy & Hold":              ("--", "#2C3E50", 1.5),
-    "60/40":                   ("--", COLORS["gray"], 1.2),
-    "MA Crossover":            (":",  "#8E44AD", 1.2),
-    "Conv1D+LSTM (ours)":      ("-",  COLORS["model"], 2.0),
-    "Regime Momentum Tilt":    ("-",  "#E67E22", 2.5),
+    "Buy & Hold":                    ("--", "#2C3E50", 1.5),
+    "60/40":                         ("--", COLORS["gray"], 1.2),
+    "MA Crossover":                  (":",  "#8E44AD", 1.2),
+    "Regime Momentum Tilt (ours)":   ("-",  "#E67E22", 2.5),
 }
 
 fig, ax = plt.subplots(figsize=(12, 5))
@@ -201,10 +199,10 @@ for name, weights in strategies.items():
     ls, color, lw = style[name]
     ax.plot(range(len(curve)), (curve - 1) * 100,
             linestyle=ls, color=color, linewidth=lw, label=name)
-# Regime Momentum Tilt 별도 추가
-ls, color, lw = style["Regime Momentum Tilt"]
+# 최종 전략 (Regime Momentum Tilt)
+ls, color, lw = style["Regime Momentum Tilt (ours)"]
 ax.plot(range(len(rmt_cum)), (rmt_cum - 1) * 100,
-        linestyle=ls, color=color, linewidth=lw, label="Regime Momentum Tilt")
+        linestyle=ls, color=color, linewidth=lw, label="Regime Momentum Tilt (ours)")
 
 ax.axhline(0, color="black", linewidth=0.5)
 ax.set_xlabel("Rebalancing Period (5-day intervals)")
@@ -231,17 +229,19 @@ with open("outputs/results/backtest_results.json") as f:
 with open("outputs/results/backtest_regime_momentum_results.json") as f:
     bt_rmt = json.load(f)
 
+rmt_data = bt_rmt["Regime Momentum Tilt"]
 strat_order = ["Buy & Hold", "80/20", "60/40", "MA Crossover",
-               "Vol Targeting", "40/60", "Conv1D+LSTM (ours)", "Regime Momentum Tilt"]
-sharpes  = [bt[s]["sharpe"]         if s in bt else bt_rmt.get("Regime Momentum Tilt", {}).get("sharpe", 0) for s in strat_order]
-mdds     = [abs(bt[s]["mdd"]) * 100 if s in bt else abs(bt_rmt.get("Regime Momentum Tilt", {}).get("mdd", 0)) * 100 for s in strat_order]
-calmars  = [bt[s]["calmar"]         if s in bt else bt_rmt.get("Regime Momentum Tilt", {}).get("calmar", 0) for s in strat_order]
-bar_colors = ["#E67E22" if s == "Regime Momentum Tilt" else COLORS["model"] if "LSTM" in s else COLORS["gray"] for s in strat_order]
+               "Vol Targeting", "40/60", "Regime Momentum Tilt (ours)"]
+all_data = {**bt, "Regime Momentum Tilt (ours)": rmt_data}
+sharpes  = [all_data[s]["sharpe"]         for s in strat_order]
+mdds     = [abs(all_data[s]["mdd"]) * 100 for s in strat_order]
+calmars  = [all_data[s]["calmar"]         for s in strat_order]
+bar_colors = ["#E67E22" if "Regime" in s else COLORS["gray"] for s in strat_order]
 
 fig, axes = plt.subplots(1, 3, figsize=(14, 5))
 fig.suptitle("Strategy Comparison: Risk-Adjusted Metrics", fontsize=13, fontweight="bold")
 
-short_names = [s.replace("Conv1D+LSTM (ours)", "Ours ◀") for s in strat_order]
+short_names = [s.replace("Regime Momentum Tilt (ours)", "Regime Tilt ◀") for s in strat_order]
 
 for ax, values, title, higher_better in zip(
     axes,
