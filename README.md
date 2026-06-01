@@ -2,7 +2,9 @@
 
 > 금융 딥러닝 기초 기말 프로젝트 — 아주대학교 금융공학과
 
-Conv1D+LSTM으로 시장 국면(Bear/Neutral/Bull)을 분류하고, 국면 확률을 MVO(평균-분산 최적화)에 연결해 동적으로 자산 비중을 조절하는 전략을 구성합니다.
+Conv1D+LSTM으로 시장 국면(Bear/Neutral/Bull) 확률을 예측하고, 그 확률을 국면별 MVO(평균-분산 최적화) 비중에 연결해 동적으로 자산배분하는 전략을 구성합니다.
+
+핵심 메시지는 단순합니다. **수익률 예측이 아니라 위험 국면을 인식하고, 그에 맞게 포트폴리오 비중을 바꾸는 것**입니다.
 
 ---
 
@@ -21,8 +23,8 @@ SPY + QQQ + GLD + TLT OHLCV (raw)
 [3] Conv1D + LSTM 학습  → 시장 국면 분류 (Accuracy 61.9%, Bear Recall 60.5%)
       │                   AdamW + Neutral-boost 1.2 + seed=42
       ▼
-[4] Regime-MVO 백테스트 → 훈련셋 국면별 Sharpe 최대화 비중 → 소프트 배분
-                          MDD -7.2% (전략 중 최저), Calmar 2.16
+[4] Regime-MVO 백테스트 → 훈련셋 국면별 Sharpe 최대화 비중 → 확률 가중평균
+                          MDD -7.2%, Calmar 2.16
 ```
 
 ---
@@ -36,9 +38,9 @@ SPY + QQQ + GLD + TLT OHLCV (raw)
 - 국면별 최적 비중은 훈련 데이터에서 **Sharpe 최대화로 자동 계산**
 
 ```
-Bear  → TLT 100%          (하락장: 채권으로 방어)
-Neutral → SPY 51% + GLD 49%  (중립: 균형)
-Bull  → SPY 95% + QQQ 5%    (상승장: 주식 집중)
+Bear    → TLT 100%             (훈련 구간 기준 방어 자산)
+Neutral → SPY 51% + GLD 49%    (중립: 균형)
+Bull    → SPY 95% + QQQ 5%     (상승장: 주식 집중)
 ```
 
 ---
@@ -89,12 +91,14 @@ Linear + Softmax
 | Buy & Hold | 49.9% | 1.07 | -17.0% | 1.26 |
 | EW 1/N (논문 벤치마크) | 50.9% | 1.41 | -8.8% | 2.47 |
 | 60/40 | 28.3% | 0.84 | -10.4% | 1.22 |
+| Regime-Agnostic MVO | 64.8% | 1.11 | -20.8% | 1.30 |
 | MA Crossover | 29.1% | 0.82 | -10.9% | 1.19 |
 | DL Regime SPY/Cash | 21.9% | 0.73 | -7.4% | 1.35 |
 | Regime Momentum Tilt | 43.1% | 1.08 | -12.9% | 1.46 |
 | **Regime-MVO (최종)** | **35.3%** | **1.10** | **-7.2%** | **2.16** |
+| Oracle (True Labels) | 41.6% | 1.16 | -6.2% | 2.91 |
 
-> Regime-MVO: MDD -7.2%로 전략 중 최저. 수익은 EW보다 낮지만 하락 방어 + 리스크 조정 수익 균형.
+> Regime-MVO는 수익률 1등 전략이 아니라 **MDD와 Calmar를 개선하는 위험관리 전략**이다. 특히 국면을 무시한 MVO는 MDD -20.8%까지 악화되지만, 국면 확률을 반영하면 MDD가 -7.2%로 줄어든다.
 
 ### 하락장 검증 (2022 Bear Market, SPY -18.6%)
 
@@ -107,7 +111,7 @@ Linear + Softmax
 | **DL Regime SPY/Cash** | **-10.5%** |
 | Regime-MVO (최종) | -22.2% |
 
-> 2022년(주식·채권 동반 하락)에서는 현금 비중을 둘 수 있는 SPY/Cash 전략이 낙폭 49%를 줄였다. 반면 Regime-MVO는 Bear 비중이 TLT에 집중되어 금리인상형 Bear에 취약했다.
+> 2022년(주식·채권 동반 하락)에서는 현금 비중을 둘 수 있는 SPY/Cash 전략이 낙폭 49%를 줄였다. 반면 Regime-MVO는 Bear 비중이 TLT에 집중되어 금리인상형 Bear에 취약했다. 이 결과는 최종 전략의 한계와 향후 방어 자산 개선 필요성을 보여준다.
 
 ---
 
@@ -143,20 +147,24 @@ Linear + Softmax
 │
 ├── scripts/
 │   ├── hmm_regime_labeling.py              # HMM 라벨 생성
-│   ├── prepare_cross_asset_dataset.py      # 교차 자산 데이터셋 생성
-│   ├── train.py                            # 모델 학습
-│   ├── backtest.py                         # 기본 백테스트
+│   ├── prepare_cross_asset_dataset.py      # 4자산 피처 + SPY 국면 라벨 데이터셋 생성
+│   ├── train.py                            # Conv1D+LSTM 모델 학습
+│   ├── backtest_mvo.py                     # Regime-MVO 백테스트
+│   ├── backtest_2022.py                    # 2022 하락장 검증
 │   ├── backtest_regime_advanced.py         # Regime Momentum Tilt 백테스트
-│   ├── backtest_mvo.py                     # Regime-MVO 백테스트 (최신)
-│   ├── backtest_2022.py                    # 2022 하락장 백테스트
-│   ├── regime_portfolio_policy.py          # Regime Momentum Tilt 정책
-│   ├── visualize.py                        # fig1~4 생성
-│   ├── visualize_comparison.py             # fig6 생성
-│   └── experiments.py                      # 실험 비교
+│   ├── backtest_regime_conditional.py      # 국면별 성과 분석
+│   ├── regime_portfolio_policy.py          # Momentum Tilt 정책
+│   ├── visualize.py                        # 분류 성능/전략 비교 그림
+│   ├── visualize_pipeline.py               # fig01 파이프라인
+│   ├── visualize_main_result.py            # 핵심 결과/국면별 분석
+│   ├── visualize_ablation.py               # Ablation 그림
+│   └── visualize_related_work.py           # 관련 연구 비교
 │
 ├── outputs/
 │   ├── models/best_model.pt                # 최종 모델 (Phase 3, seed=42)
-│   ├── figures/fig1~fig7.png
+│   ├── figures/
+│   │   ├── final/                          # 발표/보고서용 최종 그림 8개
+│   │   └── legacy/                         # 과거 결과 및 중간 산출물
 │   └── results/
 │       ├── backtest_results.json
 │       ├── backtest_regime_momentum_results.json
@@ -191,6 +199,10 @@ python3 scripts/backtest_2022.py             # 2022 하락장 검증
 
 # 그래프 생성
 python3 scripts/visualize.py
+python3 scripts/visualize_pipeline.py
+python3 scripts/visualize_main_result.py
+python3 scripts/visualize_ablation.py
+python3 scripts/backtest_regime_conditional.py
 python3 scripts/visualize_comparison.py
 ```
 
@@ -208,7 +220,7 @@ python3 scripts/visualize_comparison.py
 
 ## 한계 및 향후 연구
 
-- **Neutral Recall 0%**: 중립 구간 레이블 불명확 → 라벨 정의 및 표본 확장 개선 필요
-- **698샘플**: 금융 시계열 구조적 한계 (14년 × 5일 단위) → 일별 sliding으로 ~3,500샘플 확장 가능
-- **파라미터 최적화**: MVO 계수를 Sharpe 직접 최대화로 도출 (완료) → end-to-end 학습으로 확장 가능
-- **2022 환경**: 금리인상 Bear에서 TLT도 폭락 → 방어 자산을 단기채/MMF로 교체 필요
+- **Neutral Recall 0%**: 중립 구간은 HMM Sharpe 순위상 경계가 모호해 라벨 정의 개선이 필요하다.
+- **698샘플**: 5거래일 리밸런싱 기준이라 학습 표본이 작다. 일별 sliding 또는 더 긴 자산군 확장이 필요하다.
+- **방어 자산 한계**: 훈련 구간 Bear MVO가 TLT 100%를 선택했지만, 2022년 금리인상형 Bear에서는 TLT도 하락했다.
+- **향후 개선**: 단기채/MMF/현금/금리 민감도 제한을 포함한 방어 자산 설계, 또는 Sharpe/Drawdown을 직접 반영하는 end-to-end 학습으로 확장할 수 있다.
