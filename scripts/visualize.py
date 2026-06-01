@@ -215,8 +215,12 @@ style = {
     "60/40":                         ("--", COLORS["gray"], 1.2),
     "MA Crossover":                  (":",  "#8E44AD", 1.2),
     "EW 1/N (논문 벤치마크)":         ("--", "#27AE60", 1.5),
+    "Conv1D+LSTM (SPY/Cash)":        ("-",  "#2980B9", 2.0),
     "Regime Momentum Tilt (ours)":   ("-",  "#E67E22", 2.5),
 }
+
+# Conv1D+LSTM SPY/Cash 누적 수익률: p_bull + 0.5*p_neutral → SPY 비중, 나머지 현금
+lstm_spy_cash_curve = np.concatenate([[1.0], cumulative_curve(w_model, holding_returns)])
 
 fig, ax = plt.subplots(figsize=(12, 5))
 for name, weights in strategies.items():
@@ -227,7 +231,11 @@ for name, weights in strategies.items():
 # EW
 ax.plot(range(len(ew_curve)), (ew_curve - 1) * 100,
         linestyle="--", color="#27AE60", linewidth=1.5, label="EW 1/N (논문 벤치마크)")
-# 최종 전략
+# Conv1D+LSTM SPY/Cash
+ls, color, lw = style["Conv1D+LSTM (SPY/Cash)"]
+ax.plot(range(len(lstm_spy_cash_curve)), (lstm_spy_cash_curve - 1) * 100,
+        linestyle=ls, color=color, linewidth=lw, label="Conv1D+LSTM (SPY/Cash)")
+# Regime Momentum Tilt
 ls, color, lw = style["Regime Momentum Tilt (ours)"]
 ax.plot(range(len(rmt_cum)), (rmt_cum - 1) * 100,
         linestyle=ls, color=color, linewidth=lw, label="Regime Momentum Tilt (ours)")
