@@ -1,8 +1,8 @@
 """
-Fig 8. 국면별 전략 성과 비교 (RegimeFolio Fig 2 스타일)
+Regime-conditional strategy performance.
 
-HMM 실제 국면(y_test) 기준으로 Bear / Neutral / Bull 구간을 나누어
-각 전략의 연환산 수익률을 비교한다.
+Bear / Neutral / Bull periods are split by HMM pseudo-labels in y_test.
+This is a diagnostic figure, not proof that the HMM states are true market labels.
 """
 import csv
 import sys
@@ -44,7 +44,7 @@ device = (
 # ── 1. 데이터 로드 ────────────────────────────────────────────────
 data      = np.load("data/processed/cross_asset_supervised_30d_5d.npz", allow_pickle=True)
 y_train   = data["y_train"]
-y_test    = data["y_test"]          # HMM 실제 국면 (0=Bear, 1=Neutral, 2=Bull)
+y_test    = data["y_test"]          # HMM pseudo-labels (0=Bear, 1=Neutral, 2=Bull)
 X_test_np = data["X_test"].astype(np.float32)
 
 rows_all   = list(csv.DictReader(open("data/processed/cross_asset_supervised_30d_5d_index.csv")))
@@ -184,7 +184,7 @@ SHORT = {
     "EW 1/N":                 "EW 1/N",
     "60/40":                  "60/40",
     "DL Regime SPY/Cash":     "DL Regime\nSPY/Cash",
-    "Regime-MVO (ours)":      "Regime-\nMVO ★",
+    "Regime-MVO (ours)":      "Regime-\nMVO\n(ours)",
 }
 
 x     = np.arange(3)
@@ -197,8 +197,8 @@ xlabels = [f"{rname}\n({counts[i]} periods)"
 
 fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(13, 10))
 fig.suptitle(
-    "Strategy Performance Across Market Regimes\n"
-    "Demonstrating Regime-Aware Advantage  (Test: 2024.04 ~ 2026.05)",
+    "Regime-Conditional Strategy Performance\n"
+    "HMM pseudo-label groups, test period: 2024.04 ~ 2026.05",
     fontsize=14, fontweight="bold", y=0.98,
 )
 
@@ -220,7 +220,7 @@ for i, (sname, color) in enumerate(STRAT_STYLE.items()):
                  label, ha="center", va=va,
                  fontsize=7.5, fontweight="bold", color=color)
 
-# Bear 구간: Regime-MVO vs B&H 어드밴티지
+# Bear period: Regime-MVO vs B&H diagnostic comparison
 bear_mvo = regime_data["Regime-MVO (ours)"][0]
 bear_bnh = regime_data["Buy & Hold"][0]
 diff_bear = bear_mvo - bear_bnh
@@ -257,7 +257,7 @@ for i, (sname, color) in enumerate(STRAT_STYLE.items()):
                  f"{val:.1f}%", ha="center", va="bottom",
                  fontsize=7.5, fontweight="bold", color=color)
 
-# Bear MDD 어드밴티지
+# Bear period MDD diagnostic comparison
 bear_mdd_mvo = mdd_data["Regime-MVO (ours)"][0]
 bear_mdd_bnh = mdd_data["Buy & Hold"][0]
 mdd_diff = bear_mdd_bnh - bear_mdd_mvo   # positive = MVO has lower MDD
@@ -276,7 +276,7 @@ ax2.set_title("(b) Max Drawdown by Market Regime  (lower = better)", fontsize=11
 ax2.legend(fontsize=9, loc="upper right", ncol=3, framealpha=0.9)
 
 plt.tight_layout(rect=[0, 0, 1, 0.96])
-Path("outputs/figures").mkdir(parents=True, exist_ok=True)
-plt.savefig("outputs/figures/fig8_regime_conditional.png", bbox_inches="tight")
+Path("outputs/figures/final").mkdir(parents=True, exist_ok=True)
+plt.savefig("outputs/figures/final/fig06_regime_conditional.png", bbox_inches="tight")
 plt.close()
-print("\n저장: outputs/figures/fig8_regime_conditional.png")
+print("\n저장: outputs/figures/final/fig06_regime_conditional.png")

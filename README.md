@@ -96,7 +96,7 @@ Linear + Softmax
 | DL Regime SPY/Cash | 21.9% | 0.73 | -7.4% | 1.35 |
 | Regime Momentum Tilt | 43.1% | 1.08 | -12.9% | 1.46 |
 | **Regime-MVO (최종)** | **35.3%** | **1.10** | **-7.2%** | **2.16** |
-| Oracle (True Labels) | 41.6% | 1.16 | -6.2% | 2.91 |
+| Oracle (HMM labels) | 41.6% | 1.16 | -6.2% | 2.91 |
 
 > Regime-MVO는 수익률 1등 전략이 아니라 **MDD와 Calmar를 개선하는 위험관리 전략**이다. 특히 국면을 무시한 MVO는 MDD -20.8%까지 악화되지만, 국면 확률을 반영하면 MDD가 -7.2%로 줄어든다.
 
@@ -121,11 +121,12 @@ Linear + Softmax
 |---|---|
 | [fig01](outputs/figures/final/fig01_pipeline.png) | HMM → Conv1D+LSTM → Regime-MVO 파이프라인 |
 | [fig02](outputs/figures/final/fig02_related_work.png) | 관련 연구 비교 |
-| [fig03](outputs/figures/final/fig03_main_result.png) | 핵심 결과: MDD / Calmar 비교 |
+| [fig03-A](outputs/figures/final/fig03_static_dynamic_backtest.png) | 정적 benchmark vs 동적 Regime-MVO 누적수익률 / drawdown 경로 |
+| [fig03-B](outputs/figures/final/fig03_main_result.png) | 핵심 결과: 누적수익률 / MDD / Calmar 요약 |
 | [fig04](outputs/figures/final/fig04_classification_performance.png) | Phase별 분류 성능 비교 |
 | [fig05](outputs/figures/final/fig05_confusion_matrix.png) | Confusion Matrix (Phase 3 최종) |
-| [fig06](outputs/figures/final/fig06_regime_conditional.png) | Bear / Neutral / Bull 구간별 전략 성과 |
-| [fig07](outputs/figures/final/fig07_ablation.png) | Ablation: 구성요소별 기여 |
+| [fig06](outputs/figures/final/fig06_regime_conditional.png) | HMM pseudo-label 기준 Bear / Neutral / Bull 구간별 전략 성과 |
+| [fig07](outputs/figures/final/fig07_ablation.png) | Ablation 및 benchmark 점검 |
 | [fig08](outputs/figures/final/fig08_2022_bear.png) | 2022 하락장 검증 |
 
 ---
@@ -157,14 +158,14 @@ Linear + Softmax
 │   ├── visualize.py                        # 분류 성능/전략 비교 그림
 │   ├── visualize_pipeline.py               # fig01 파이프라인
 │   ├── visualize_main_result.py            # 핵심 결과/국면별 분석
+│   ├── visualize_static_dynamic_backtest.py # 정적/동적 백테스트 핵심 그림
 │   ├── visualize_ablation.py               # Ablation 그림
 │   └── visualize_related_work.py           # 관련 연구 비교
 │
 ├── outputs/
 │   ├── models/best_model.pt                # 최종 모델 (Phase 3, seed=42)
 │   ├── figures/
-│   │   ├── final/                          # 발표/보고서용 최종 그림 8개
-│   │   └── legacy/                         # 과거 결과 및 중간 산출물
+│   │   └── final/                          # 발표/보고서용 최종 그림
 │   └── results/
 │       ├── backtest_results.json
 │       ├── backtest_regime_momentum_results.json

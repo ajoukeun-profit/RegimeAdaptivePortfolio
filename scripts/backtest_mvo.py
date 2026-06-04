@@ -174,7 +174,7 @@ lstm_w[:, 0] = lstm_w_spy
 agnostic_w_single = max_sharpe_weights(train_R)
 agnostic_w = np.tile(agnostic_w_single, (len(test_rows), 1))
 
-# Oracle: 실제 HMM 라벨(y_test)로 비중 결정 (완벽한 분류기 상한선)
+# Oracle: HMM pseudo-label(y_test)로 비중 결정 (분류기 상한선)
 data_full   = np.load("data/processed/cross_asset_supervised_30d_5d.npz", allow_pickle=True)
 y_test_true = data_full["y_test"]
 oracle_w    = np.array([mvo_w[int(y)] for y in y_test_true])
@@ -186,7 +186,7 @@ results = {
     "Regime-Agnostic MVO":    portfolio_metrics(agnostic_w,   test_R, "Regime-Agnostic MVO"),
     "DL Regime SPY/Cash":     portfolio_metrics(lstm_w,       test_R, "DL Regime SPY/Cash"),
     "Regime-MVO (ours)":      portfolio_metrics(soft_weights, test_R, "Regime-MVO (ours)"),
-    "Oracle (True Labels)":   portfolio_metrics(oracle_w,     test_R, "Oracle (True Labels)"),
+    "Oracle (HMM labels)":    portfolio_metrics(oracle_w,     test_R, "Oracle (HMM labels)"),
 }
 
 
@@ -197,9 +197,7 @@ print(f"{'='*72}")
 print(f"{'전략':<26} {'누적':>7} {'연수익':>7} {'변동성':>7} {'Sharpe':>7} {'MDD':>8} {'Calmar':>7}")
 print("─" * 72)
 for name, m in results.items():
-    if "ours" in name:   marker = " ◀"
-    elif "Oracle" in name: marker = " ★"
-    else: marker = ""
+    marker = " <- ours" if "ours" in name else ""
     print(f"{name:<26} {m['cum_ret']:>6.1%}  {m['ann_ret']:>6.1%}  "
           f"{m['ann_vol']:>6.1%}  {m['sharpe']:>6.2f}  {m['mdd']:>7.1%}  "
           f"{m['calmar']:>6.2f}{marker}")
@@ -208,7 +206,7 @@ for name, m in results.items():
 print()
 r_agnostic = results["Regime-Agnostic MVO"]
 r_ours     = results["Regime-MVO (ours)"]
-r_oracle   = results["Oracle (True Labels)"]
+r_oracle   = results["Oracle (HMM labels)"]
 print(f"[국면 conditioning 효과] MDD {r_agnostic['mdd']:.1%} → {r_ours['mdd']:.1%}"
       f"  ({abs(r_ours['mdd']-r_agnostic['mdd'])*100:.1f}pp 개선)")
 print(f"[분류기 개선 여지]       MDD {r_ours['mdd']:.1%} → {r_oracle['mdd']:.1%}"
@@ -232,7 +230,7 @@ STYLE = {
     "Regime-Agnostic MVO":  ("#E67E22", "--", 1.8),
     "DL Regime SPY/Cash":   ("#2980B9", "-",  1.8),
     "Regime-MVO (ours)":    ("#E74C3C", "-",  2.8),
-    "Oracle (True Labels)": ("#8E44AD", ":",  2.0),
+    "Oracle (HMM labels)":  ("#8E44AD", ":",  2.0),
 }
 
 fig, ax = plt.subplots(figsize=(13, 5.5))
@@ -241,9 +239,12 @@ dates_axis = [r["target_date"] for r in test_rows]
 for name, m in results.items():
     color, ls, lw = STYLE[name]
     curve = np.concatenate([[1.0], np.cumprod(1 + m["_rets"])])
-    if "ours" in name:     lbl = f"{name} ◀"
-    elif "Oracle" in name: lbl = f"{name} ★ (upper bound)"
-    else:                  lbl = name
+    if "ours" in name:
+        lbl = "Regime-MVO (ours)"
+    elif "Oracle" in name:
+        lbl = "Oracle (HMM labels, upper bound)"
+    else:
+        lbl = name
     ax.plot(range(len(curve)), (curve - 1) * 100,
             color=color, linestyle=ls, linewidth=lw, label=lbl)
 
