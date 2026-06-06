@@ -2,226 +2,211 @@
 
 > 금융 딥러닝 기초 기말 프로젝트 — 아주대학교 금융공학과
 
-Conv1D+LSTM으로 시장 국면(Bear/Neutral/Bull) 확률을 예측하고, 그 확률을 국면별 MVO(평균-분산 최적화) 비중에 연결해 동적으로 자산배분하는 전략을 구성합니다.
+HMM이 만든 시장 국면 pseudo-label을 Conv1D+LSTM으로 예측하고, 그 예측 확률을 MVO(Mean-Variance Optimization) 포트폴리오 비중에 연결해 동적으로 자산배분하는 프로젝트입니다.
 
-핵심 메시지는 단순합니다. **수익률 예측이 아니라 위험 국면을 인식하고, 그에 맞게 포트폴리오 비중을 바꾸는 것**입니다.
+현재 최종 전략은 **Binary Soft Label + 2-Regime MVO + weight cap 40%**입니다.
+
+---
+
+## 핵심 결론
+
+처음에는 Bear / Neutral / Bull 3-class 분류로 시작했지만, Neutral label이 구조적으로 애매해 test에서 전혀 예측되지 않는 문제가 있었습니다. 그래서 투자 목적에 더 맞게 문제를 **Bear vs Non-Bear** binary classification으로 재정의했습니다.
+
+최종 흐름은 다음과 같습니다.
+
+```text
+Neutral label failure
+-> Bear vs Non-Bear binary classification
+-> Binary soft-label training
+-> 2-Regime MVO
+-> MVO weight cap 40%
+```
+
+최종 비교 결과:
+
+| Strategy | CumRet | Sharpe | MDD | Calmar |
+|---|---:|---:|---:|---:|
+| 60/40 | 28.3% | 0.84 | -10.4% | 1.22 |
+| Buy & Hold | 49.9% | 1.07 | -17.0% | 1.26 |
+| EW 1/N | 50.9% | 1.41 | -8.8% | 2.47 |
+| 3-class Regime-MVO cap 40% | 51.9% | 1.46 | -9.0% | 2.47 |
+| **Binary Regime-MVO Soft cap 40%** | **53.7%** | **1.48** | **-9.0%** | **2.55** |
+
+Binary soft-label MVO cap 40%가 현재 비교 전략 중 누적수익률, Sharpe, Calmar 기준으로 가장 균형 잡힌 결과를 냈습니다.
 
 ---
 
 ## 전체 파이프라인
 
-```
-SPY + QQQ + GLD + TLT OHLCV (raw)
-      │
-      ▼
-[1] HMM 라벨링          → SPY 기준 Bear / Neutral / Bull 국면 라벨
-      │                   (504일 rolling window, 3-state Gaussian HMM)
-      ▼
-[2] 교차 자산 데이터셋   → X: (698, 30, 40)  y: (698,)
-      │                   (4자산 피처 concat, 5일 단위 리밸런싱)
-      ▼
-[3] Conv1D + LSTM 학습  → 시장 국면 분류 (Accuracy 61.9%, Bear Recall 60.5%)
-      │                   AdamW + Neutral-boost 1.2 + seed=42
-      ▼
-[4] Regime-MVO 백테스트 → 훈련셋 국면별 Sharpe 최대화 비중 → 확률 가중평균
-                          MDD -7.2%, Calmar 2.16
-```
-
----
-
-## 핵심 컨셉
-
-**"국면 분류기가 설명하는 포트폴리오 리밸런싱"**
-
-- 단순 수익률 예측이 아닌 **시장 국면(Bear/Neutral/Bull) 분류** → 해석 가능
-- 분류 확률을 MVO에 연결: `w = p_bear × w_bear + p_neutral × w_neutral + p_bull × w_bull`
-- 국면별 최적 비중은 훈련 데이터에서 **Sharpe 최대화로 자동 계산**
-
-```
-Bear    → TLT 100%             (훈련 구간 기준 방어 자산)
-Neutral → SPY 51% + GLD 49%    (중립: 균형)
-Bull    → SPY 95% + QQQ 5%     (상승장: 주식 집중)
+```text
+SPY + QQQ + GLD + TLT OHLCV
+      |
+      v
+HMM 3-state pseudo-label
+      |
+      v
+Bear / Neutral / Bull posterior
+      |
+      v
+Binary soft label
+P(Bear), P(Non-Bear) = P(Neutral) + P(Bull)
+      |
+      v
+Conv1D + LSTM classifier
+      |
+      v
+2-Regime MVO allocation
+w_t = P(Non-Bear) * w_non_bear + P(Bear) * w_bear
+      |
+      v
+Weight cap 40% portfolio backtest
 ```
 
 ---
 
-## 모델 구조: Conv1D + LSTM
+## 왜 Binary로 바꿨나
 
-```
-입력 (batch, 30, 40)   ← SPY+QQQ+GLD+TLT 각 10개 피처 concat
-      ↓
-Conv1D × 2   — 단기 국소 패턴 추출
-      ↓
-LSTM         — 시계열 장기 의존성 학습
-      ↓
-Linear + Softmax
-      ↓
-출력 (batch, 3)  →  [p_bear, p_neutral, p_bull]
-```
+3-class 모델의 문제:
 
-| 하이퍼파라미터 | 값 |
-|---|---|
-| conv_channels | 16 |
-| lstm_hidden | 32 |
-| dropout | 0.6 |
-| optimizer | AdamW (lr=1e-4, weight_decay=1e-2) |
-| neutral_boost | 1.2 |
-| best_metric | val_balanced_accuracy |
-| seed | 42 |
+| Metric | 3-class hard label |
+|---|---:|
+| Balanced Accuracy | 51.9% |
+| Bear Recall | 60.5% |
+| Neutral Recall | 0.0% |
+| Bull Recall | 95.1% |
 
----
+Neutral은 HMM의 중간 상태라 Bear/Bull보다 경제적 경계가 흐립니다. 이 프로젝트의 최종 목표도 모든 국면을 예쁘게 맞히는 것이 아니라 하방 위험을 관리하는 것이므로, Neutral과 Bull을 합쳐 **Non-Bear**로 두는 편이 더 자연스럽습니다.
 
-## 실험 결과: 분류 성능
+Binary 실험 결과:
 
-| 단계 | 실험 | Accuracy | Bear Recall | Neutral Recall | Bull Recall |
-|---|---|---|---|---|---|
-| Phase 1 | Baseline (SPY, 10피처) | 57.1% | 34.9% | 23.8% | 97.6% |
-| Phase 1 | Augmentation | 61.0% | 46.5% | 33.3% | 90.2% |
-| Phase 2 | 4자산 각자 라벨 | 59.8% | 58.8% | 25.3% | 80.6% |
-| **Phase 3** | **Cross-asset + AdamW (최종)** | **61.9%** | **60.5%** | 0.0% | **95.1%** |
+| Model | Test Balanced Acc | Bear Recall |
+|---|---:|---:|
+| 3-class hard label | 51.9% | 60.5% |
+| Binary hard label | 70.2% | 58.1% |
+| **Binary soft label** | **72.4%** | **67.4%** |
 
-> Bear Recall 34% → 60%로 개선이 핵심. Neutral Recall 0%는 레이블 불명확성에 기인한 구조적 한계.
+Binary soft label은 hard label보다 Bear 탐지가 좋아졌고, 이 확률을 최종 2-Regime MVO에 연결했습니다.
 
 ---
 
-## 백테스트 결과 (Test: 2024.04 ~ 2026.05)
+## 딥러닝이 필요한가
 
-| 전략 | 누적수익 | Sharpe | MDD | Calmar |
-|---|---|---|---|---|
-| Buy & Hold | 49.9% | 1.07 | -17.0% | 1.26 |
-| EW 1/N (논문 벤치마크) | 50.9% | 1.41 | -8.8% | 2.47 |
-| 60/40 | 28.3% | 0.84 | -10.4% | 1.22 |
-| Regime-Agnostic MVO | 64.8% | 1.11 | -20.8% | 1.30 |
-| MA Crossover | 29.1% | 0.82 | -10.9% | 1.19 |
-| DL Regime SPY/Cash | 21.9% | 0.73 | -7.4% | 1.35 |
-| Regime Momentum Tilt | 43.1% | 1.08 | -12.9% | 1.46 |
-| **Regime-MVO (최종)** | **35.3%** | **1.10** | **-7.2%** | **2.16** |
-| Oracle (HMM labels) | 41.6% | 1.16 | -6.2% | 2.91 |
+작은 샘플에서는 Logistic Regression이나 Random Forest 같은 classical baseline도 꼭 확인해야 합니다. 그래서 LR/RF와 Conv1D+LSTM을 같은 binary Bear detection task에서 비교했습니다.
 
-> Regime-MVO는 수익률 1등 전략이 아니라 **MDD와 Calmar를 개선하는 위험관리 전략**이다. 특히 국면을 무시한 MVO는 MDD -20.8%까지 악화되지만, 국면 확률을 반영하면 MDD가 -7.2%로 줄어든다.
+| Model | Valid Balanced Acc | Test Balanced Acc | Bear Recall |
+|---|---:|---:|---:|
+| Logistic Regression | 63.7% | 61.4% | 32.6% |
+| Random Forest | 79.1% | 66.3% | 53.5% |
+| Conv1D+LSTM Binary | 85.2% | 70.2% | 58.1% |
+| **Conv1D+LSTM Binary Soft** | **73.3%** | **72.4%** | **67.4%** |
 
-### 하락장 검증 (2022 Bear Market, SPY -18.6%)
+LR < RF < LSTM 흐름이 확인되어, 시계열 패턴을 학습하는 딥러닝 모델의 효과가 있다고 볼 수 있습니다.
 
-| 전략 | MDD |
-|---|---|
-| Buy & Hold | -20.5% |
-| EW 1/N | -21.7% |
-| MA Crossover | -20.8% |
-| 60/40 | -12.5% |
-| **DL Regime SPY/Cash** | **-10.5%** |
-| Regime-MVO (최종) | -22.2% |
+---
 
-> 2022년(주식·채권 동반 하락)에서는 현금 비중을 둘 수 있는 SPY/Cash 전략이 낙폭 49%를 줄였다. 반면 Regime-MVO는 Bear 비중이 TLT에 집중되어 금리인상형 Bear에 취약했다. 이 결과는 최종 전략의 한계와 향후 방어 자산 개선 필요성을 보여준다.
+## MVO Weight Cap
+
+제약 없는 MVO는 작은 샘플에서 추정 오차에 민감하게 반응해 특정 자산에 몰빵하는 문제가 있습니다. Binary MVO에서도 cap이 없으면 다음처럼 극단적 비중이 나옵니다.
+
+| Cap | Non-Bear MVO | Bear MVO |
+|---|---|---|
+| None | SPY 100% | TLT 100% |
+| 50% | SPY 50%, QQQ 50% | GLD 50%, TLT 50% |
+| 40% | SPY 40%, QQQ 40%, GLD 20% | GLD 40%, TLT 40%, SPY 20% |
+
+따라서 최종 전략에서는 자산별 최대 비중을 40%로 제한했습니다.
 
 ---
 
 ## 출력 그림
 
-| 그림 | 내용 |
-|---|---|
-| [fig01](outputs/figures/final/fig01_pipeline.png) | HMM → Conv1D+LSTM → Regime-MVO 파이프라인 |
-| [fig02](outputs/figures/final/fig02_related_work.png) | 관련 연구 비교 |
-| [fig03-A](outputs/figures/final/fig03_static_dynamic_backtest.png) | 정적 benchmark vs 동적 Regime-MVO 누적수익률 / drawdown 경로 |
-| [fig03-B](outputs/figures/final/fig03_main_result.png) | 핵심 결과: 누적수익률 / MDD / Calmar 요약 |
-| [fig04](outputs/figures/final/fig04_classification_performance.png) | Phase별 분류 성능 비교 |
-| [fig05](outputs/figures/final/fig05_confusion_matrix.png) | Confusion Matrix (Phase 3 최종) |
-| [fig06](outputs/figures/final/fig06_regime_conditional.png) | HMM pseudo-label 기준 Bear / Neutral / Bull 구간별 전략 성과 |
-| [fig07](outputs/figures/final/fig07_ablation.png) | Ablation 및 benchmark 점검 |
-| [fig08](outputs/figures/final/fig08_2022_bear.png) | 2022 하락장 검증 |
+발표/보고서에는 `outputs/figures/final/` 아래 그림만 사용합니다.
+
+| Figure | File | 내용 |
+|---|---|---|
+| Fig 01 | [fig01_pipeline.png](outputs/figures/final/fig01_pipeline.png) | HMM → Conv1D+LSTM → Regime-MVO 파이프라인 |
+| Fig 02 | [fig02_related_work.png](outputs/figures/final/fig02_related_work.png) | 관련 연구 비교 |
+| Fig 03-A | [fig03_static_dynamic_backtest.png](outputs/figures/final/fig03_static_dynamic_backtest.png) | Binary Regime-MVO Soft cap 40% 누적수익률 / drawdown |
+| Fig 03-B | [fig03_main_result.png](outputs/figures/final/fig03_main_result.png) | 최종 전략 핵심 성과 요약 |
+| Fig 04 | [fig04_classification_performance.png](outputs/figures/final/fig04_classification_performance.png) | Binary Hard / Binary Soft / LR / RF 비교 |
+| Fig 05 | [fig05_confusion_matrix.png](outputs/figures/final/fig05_confusion_matrix.png) | Binary Soft Label confusion matrix |
+| Fig 07 | [fig07_ablation.png](outputs/figures/final/fig07_ablation.png) | 전략 ablation 비교 |
+| Fig 09 | [fig09_binary_mvo_weights.png](outputs/figures/final/fig09_binary_mvo_weights.png) | MVO cap별 비중 변화 |
 
 ---
 
 ## 프로젝트 구조
 
-```
+```text
 .
-├── README.md
-├── jrfm-12-00168-v2.pdf          # 참고 논문 (Kim et al. 2019)
-├── RegimFolio.pdf                # 참고 논문 (Zhang et al. 2025)
-│
 ├── data/
-│   ├── raw/                      # SPY/QQQ/GLD/TLT OHLCV
+│   ├── raw/
 │   └── processed/
 │       ├── spy_hmm_regime_labels_5d.csv
-│       ├── cross_asset_supervised_30d_5d.npz      # 최종 데이터셋 (698샘플, 30×40)
-│       └── cross_asset_supervised_30d_5d_index.csv
-│
-├── scripts/
-│   ├── hmm_regime_labeling.py              # HMM 라벨 생성
-│   ├── prepare_cross_asset_dataset.py      # 4자산 피처 + SPY 국면 라벨 데이터셋 생성
-│   ├── train.py                            # Conv1D+LSTM 모델 학습
-│   ├── backtest_mvo.py                     # Regime-MVO 백테스트
-│   ├── backtest_2022.py                    # 2022 하락장 검증
-│   ├── backtest_regime_advanced.py         # Regime Momentum Tilt 백테스트
-│   ├── backtest_regime_conditional.py      # 국면별 성과 분석
-│   ├── regime_portfolio_policy.py          # Momentum Tilt 정책
-│   ├── visualize.py                        # 분류 성능/전략 비교 그림
-│   ├── visualize_pipeline.py               # fig01 파이프라인
-│   ├── visualize_main_result.py            # 핵심 결과/국면별 분석
-│   ├── visualize_static_dynamic_backtest.py # 정적/동적 백테스트 핵심 그림
-│   ├── visualize_ablation.py               # Ablation 그림
-│   └── visualize_related_work.py           # 관련 연구 비교
-│
+│       ├── cross_asset_supervised_30d_5d.*
+│       ├── cross_asset_supervised_30d_5d_binary_bear.*
+│       └── cross_asset_supervised_30d_5d_binary_soft_labels.*
+├── docs/
+│   ├── PRESENTATION_OUTLINE.md
+│   ├── TROUBLESHOOTING.md
+│   ├── VISUALIZATION_PLAN.md
+│   └── CONCEPTUAL_MATH_REPORT_NOTION.md
 ├── outputs/
-│   ├── models/best_model.pt                # 최종 모델 (Phase 3, seed=42)
-│   ├── figures/
-│   │   └── final/                          # 발표/보고서용 최종 그림
+│   ├── figures/final/
+│   ├── models/
 │   └── results/
-│       ├── backtest_results.json
-│       ├── backtest_regime_momentum_results.json
-│       ├── backtest_mvo_results.json
-│       └── backtest_2022_results.json
-│
-└── docs/
-    ├── OVERVIEW.md               # 프로젝트 전체 설명
-    ├── FOR_TEAMMATES.md          # 팀원용 요약
-    ├── MODEL_IMPROVEMENT.md      # 실험 상세 기록
-    └── PRESENTATION_OUTLINE.md  # 발표 목차 & Q&A 대응
+└── scripts/
+    ├── hmm_regime_labeling.py
+    ├── prepare_cross_asset_dataset.py
+    ├── prepare_supervised_dataset.py
+    ├── train.py
+    ├── train_soft_labels.py
+    ├── baseline_binary_bear_sklearn.py
+    ├── backtest_mvo.py
+    ├── backtest_binary_mvo.py
+    ├── regime_portfolio_policy.py
+    ├── visualize_binary_mvo_results.py
+    ├── visualize_pipeline.py
+    └── visualize_related_work.py
 ```
+
+`FOR_TEAMMATES.md`는 삭제했습니다. 팀원 공유용 요약은 현재 `README.md`, `docs/PRESENTATION_OUTLINE.md`, `docs/TROUBLESHOOTING.md`로 통일합니다.
 
 ---
 
-## 실행 방법
+## 주요 실행 명령
 
 ```bash
-# 최종 모델 재현
-python3 scripts/train.py \
-  --data data/processed/cross_asset_supervised_30d_5d.npz \
-  --model-output outputs/models/best_model.pt \
-  --epochs 80 --patience 10 --batch-size 16 \
-  --lr 1e-4 --conv-channels 16 --lstm-hidden 32 \
-  --dropout 0.6 --weight-decay 1e-2 \
-  --neutral-boost 1.2 --best-metric val_bal_acc --seed 42
+# 1. Binary soft-label dataset 생성
+python3 scripts/prepare_cross_asset_dataset.py \
+  --binary-bear --soft-labels \
+  --output data/processed/cross_asset_supervised_30d_5d_binary_soft_labels.npz \
+  --index-output data/processed/cross_asset_supervised_30d_5d_binary_soft_labels_index.csv \
+  --meta-output data/processed/cross_asset_supervised_30d_5d_binary_soft_labels_meta.json
 
-# 백테스트 (전략 비교)
-python3 scripts/backtest_mvo.py              # Regime-MVO (최신)
-python3 scripts/backtest_regime_advanced.py  # Regime Momentum Tilt
-python3 scripts/backtest_2022.py             # 2022 하락장 검증
+# 2. Binary soft-label Conv1D+LSTM 학습
+python3 scripts/train_soft_labels.py \
+  --data data/processed/cross_asset_supervised_30d_5d_binary_soft_labels.npz \
+  --index data/processed/cross_asset_supervised_30d_5d_binary_soft_labels_index.csv \
+  --model-output outputs/models/best_model_binary_soft_labels.pt \
+  --history-output outputs/results/train_history_binary_soft_labels.json
 
-# 그래프 생성
-python3 scripts/visualize.py
+# 3. 최종 Binary Soft MVO cap 40% 백테스트
+python3 scripts/backtest_binary_mvo.py \
+  --max-weight 0.4 \
+  --output outputs/results/backtest_binary_soft_mvo_cap40_results.json
+
+# 4. 최종 figure 생성
+python3 scripts/visualize_binary_mvo_results.py
 python3 scripts/visualize_pipeline.py
-python3 scripts/visualize_main_result.py
-python3 scripts/visualize_ablation.py
-python3 scripts/backtest_regime_conditional.py
-python3 scripts/visualize_comparison.py
+python3 scripts/visualize_related_work.py
 ```
 
 ---
 
-## 관련 연구
+## 한계 및 다음 작업
 
-| 논문 | 기여 | 우리와의 관계 |
-|---|---|---|
-| Kim et al. (2019) | HMM 기반 국면 레이블링 | 레이블링 방법론 계승 |
-| Jiang et al. (2017) | DRL 포트폴리오 최적화 (391회 인용) | end-to-end 방향의 선행 연구 |
-| Zhang et al. (2025) RegimeFolio | VIX 국면 + MVO + 섹터 앙상블 | 우리와 동일 구조, 국면 감지는 우리가 더 정교 |
-
----
-
-## 한계 및 향후 연구
-
-- **Neutral Recall 0%**: 중립 구간은 HMM Sharpe 순위상 경계가 모호해 라벨 정의 개선이 필요하다.
-- **698샘플**: 5거래일 리밸런싱 기준이라 학습 표본이 작다. 일별 sliding 또는 더 긴 자산군 확장이 필요하다.
-- **방어 자산 한계**: 훈련 구간 Bear MVO가 TLT 100%를 선택했지만, 2022년 금리인상형 Bear에서는 TLT도 하락했다.
-- **향후 개선**: 단기채/MMF/현금/금리 민감도 제한을 포함한 방어 자산 설계, 또는 Sharpe/Drawdown을 직접 반영하는 end-to-end 학습으로 확장할 수 있다.
+- HMM label은 실제 정답이 아니라 pseudo-label이므로 classification 성능을 과대해석하면 안 됩니다.
+- cap 40%는 현재 test 구간에서 좋은 결과이며, 더 엄밀하게는 validation/walk-forward 방식으로 cap을 선택해야 합니다.
+- MVO는 평균과 공분산 추정에 민감하므로 shrinkage, equal-weight blending, 현금/단기채 추가를 후속 실험으로 볼 수 있습니다.
+- 최종 결론은 "항상 수익률을 극대화했다"가 아니라, **binary regime probability와 capped MVO를 결합했을 때 현재 비교군 중 가장 균형 잡힌 risk-return 결과를 얻었다**입니다.

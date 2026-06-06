@@ -140,6 +140,10 @@ This script regenerates:
 - `outputs/figures/final/fig07_ablation.png`
 - `outputs/figures/final/fig09_binary_mvo_weights.png`
 
-## 5. Remaining Cleanup Item
+## 5. Current Status
 
-`docs/PRESENTATION_OUTLINE.md` still contains older narrative text about the 3-class Regime-MVO result. It should be updated before final presentation use.
+The README, presentation outline, troubleshooting notes, and figure guide are synchronized around the current final strategy:
+
+```text
+Binary Soft Label + 2-Regime MVO + cap 40%
+```

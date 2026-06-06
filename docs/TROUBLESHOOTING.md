@@ -132,7 +132,7 @@ But this creates a trade-off:
 - Higher Neutral weight improves Neutral recall.
 - Bear and Bull recall often drop.
 
-Prior experiment evidence in `docs/MODEL_IMPROVEMENT.md`:
+Prior experiment evidence:
 
 - `neutral_boost=2.0`: Neutral recall improved, but total accuracy and Bear/Bull performance dropped.
 - `neutral_boost=1.2`: Better overall model, but Neutral recall remained 0.0%.
@@ -659,9 +659,10 @@ Backtest result:
 | Buy & Hold | 49.9% | 1.07 | -17.0% | 1.26 |
 | EW 1/N | 50.9% | 1.41 | -8.8% | 2.47 |
 | 60/40 | 28.3% | 0.84 | -10.4% | 1.22 |
-| DL Regime SPY/Cash | 21.9% | 0.72 | -7.5% | 1.32 |
 | Regime-MVO SoftLabel | 34.8% | 1.08 | -7.1% | 2.17 |
 | Oracle (HMM labels) | 41.6% | 1.16 | -6.2% | 2.91 |
+
+Note: the earlier auxiliary threshold-style stock/cash diagnostic is intentionally omitted here because the final project story is MVO-based.
 
 Interpretation:
 
@@ -713,12 +714,12 @@ Backtest result:
 
 | Strategy | Soft Label | Soft Label + Confidence |
 |---|---:|---:|
-| DL Regime SPY/Cash cumulative return | 21.9% | 21.2% |
-| DL Regime SPY/Cash MDD | -7.5% | -7.1% |
 | Regime-MVO cumulative return | 34.8% | 33.5% |
 | Regime-MVO Sharpe | 1.08 | 1.05 |
 | Regime-MVO MDD | -7.1% | -7.1% |
 | Regime-MVO Calmar | 2.17 | 2.08 |
+
+Note: threshold-style stock/cash diagnostics were excluded from the final documentation to keep the portfolio story aligned with Regime-MVO.
 
 Interpretation:
 
