@@ -618,7 +618,7 @@ def build_arg_parser():
     parser.add_argument(
         "--data",
         type=Path,
-        default=Path("data/processed/spy_supervised_30d_5d.npz"),
+        default=Path("data/processed/cross_asset_supervised_30d_5d.npz"),
     )
 
     parser.add_argument(

@@ -570,55 +570,7 @@ Success criteria:
 - Establish a simple baseline.
 - If baseline is competitive, use it in the report as robustness evidence.
 
-First run result:
-
-`scikit-learn` was not available in the current Python environment, and system-wide package installation was blocked by the externally managed Python policy. To avoid modifying the environment, a small dependency-free baseline script was added.
-
-Script:
-
-```bash
-python3 scripts/baseline_binary_bear.py
-```
-
-Output:
-
-- `outputs/results/baseline_binary_bear_results.json`
-
-Feature representation:
-
-Instead of feeding the full `(30, 40)` tensor directly, the baseline uses compact 30-day summary features:
-
-```text
-last value, mean, standard deviation, min, max, recent 5-day mean
-```
-
-This gives a simpler and more stable tabular input for small-sample classical models.
-
-Classification comparison:
-
-| Model | Valid Balanced Acc | Test Balanced Acc | Bear Recall |
-|---|---:|---:|---:|
-| Logistic Regression | 65.2% | 62.6% | 34.9% |
-| Random Forest | 82.4% | 67.2% | 48.8% |
-| Conv1D+LSTM Binary | 85.2% | 70.2% | 58.1% |
-
-Interpretation:
-
-The classical baselines are useful sanity checks. Logistic Regression is too conservative and misses many Bear samples. The Random Forest baseline is stronger, especially on validation, but its test Bear recall is still weaker than the binary Conv1D+LSTM.
-
-This supports the claim that the LSTM is adding some value beyond simple tabular summary rules. The gain is not enormous, but it is meaningful for the project's downside-risk objective:
-
-- Better Bear recall
-- Better test balanced accuracy
-- Better downside-regime detection before connecting the signal to MVO
-
-Important caution:
-
-The Random Forest implementation is a small in-project approximation, not a full scikit-learn implementation. If a clean virtual environment is available later, the baseline should be repeated with official `sklearn.linear_model.LogisticRegression` and `sklearn.ensemble.RandomForestClassifier`.
-
-Sklearn rerun:
-
-After creating a local virtual environment, the official scikit-learn baselines were also tested.
+After creating a local virtual environment, the official scikit-learn baselines were tested.
 
 Command:
 
@@ -640,7 +592,7 @@ Result:
 
 Interpretation:
 
-The official sklearn baselines support the same conclusion as the dependency-free baseline. Random Forest is a useful comparator and detects more Bear samples than Logistic Regression, but the binary Conv1D+LSTM remains stronger on test balanced accuracy and Bear recall.
+Random Forest is a useful comparator and detects more Bear samples than Logistic Regression, but the binary Conv1D+LSTM remains stronger on test balanced accuracy and Bear recall.
 
 Environment note:
 
