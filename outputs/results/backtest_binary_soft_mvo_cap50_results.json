@@ -1,0 +1,88 @@
+{
+  "regime_weights": {
+    "Non-Bear": {
+      "SPY": 0.5,
+      "QQQ": 0.4983329360894235,
+      "GLD": 0.0016670639105766493,
+      "TLT": 0.0
+    },
+    "Bear": {
+      "SPY": 0.0,
+      "QQQ": 0.07259482936908333,
+      "GLD": 0.4274051706309168,
+      "TLT": 0.4999999999999999
+    }
+  },
+  "results": {
+    "Buy & Hold": {
+      "name": "Buy & Hold",
+      "cum_ret": 0.4994445478163769,
+      "ann_ret": 0.21463725210321027,
+      "ann_vol": 0.15378785916072793,
+      "sharpe": 1.0705477857724994,
+      "mdd": -0.17025205634211327,
+      "calmar": 1.2607028467950314
+    },
+    "EW 1/N": {
+      "name": "EW 1/N",
+      "cum_ret": 0.5086947671370632,
+      "ann_ret": 0.21822824440598798,
+      "ann_vol": 0.11971665879664295,
+      "sharpe": 1.4052200094537335,
+      "mdd": -0.08848201212880302,
+      "calmar": 2.46635716294871
+    },
+    "60/40": {
+      "name": "60/40",
+      "cum_ret": 0.282997650075528,
+      "ann_ret": 0.12706357235176502,
+      "ann_vol": 0.09227271549643676,
+      "sharpe": 0.8351718266570461,
+      "mdd": -0.10438955962330909,
+      "calmar": 1.2172057513248964
+    },
+    "Regime-Agnostic MVO": {
+      "name": "Regime-Agnostic MVO",
+      "cum_ret": 0.5026838488922925,
+      "ann_ret": 0.21589607606318562,
+      "ann_vol": 0.15566911953235915,
+      "sharpe": 1.0656967583651078,
+      "mdd": -0.16532385035902364,
+      "calmar": 1.3058979427005686
+    },
+    "Binary Regime-MVO Soft": {
+      "name": "Binary Regime-MVO Soft",
+      "cum_ret": 0.4786437417552589,
+      "ann_ret": 0.20651993979992178,
+      "ann_vol": 0.1144775550763781,
+      "sharpe": 1.367254390570217,
+      "mdd": -0.08327558883706232,
+      "calmar": 2.479957724513967
+    },
+    "Binary Regime-MVO Hard": {
+      "name": "Binary Regime-MVO Hard",
+      "cum_ret": 0.45749744085686705,
+      "ann_ret": 0.19820670198592083,
+      "ann_vol": 0.1272570929752531,
+      "sharpe": 1.1646242933959028,
+      "mdd": -0.09624793605236392,
+      "calmar": 2.0593345698144216
+    },
+    "Oracle Binary MVO": {
+      "name": "Oracle Binary MVO",
+      "cum_ret": 0.9042568178092301,
+      "ann_ret": 0.3622858611523747,
+      "ann_vol": 0.1438770545325143,
+      "sharpe": 2.1705049645828156,
+      "mdd": -0.1367863724532793,
+      "calmar": 2.6485522984105523
+    }
+  },
+  "_config": {
+    "data": "data/processed/cross_asset_supervised_30d_5d_binary_soft_labels.npz",
+    "index": "data/processed/cross_asset_supervised_30d_5d_binary_soft_labels_index.csv",
+    "model": "outputs/models/best_model_binary_soft_labels.pt",
+    "output": "outputs/results/backtest_binary_soft_mvo_cap50_results.json",
+    "max_weight": 0.5
+  }
+}

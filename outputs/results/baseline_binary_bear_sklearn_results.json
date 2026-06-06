@@ -1,0 +1,136 @@
+{
+  "Logistic Regression": {
+    "valid_classification": {
+      "accuracy": 0.6761904761904762,
+      "balanced_accuracy": 0.636721680420105,
+      "macro_f1": 0.6357142857142857,
+      "non_bear_precision": 0.6794871794871795,
+      "non_bear_recall": 0.8548387096774194,
+      "non_bear_f1": 0.7571428571428571,
+      "bear_precision": 0.6666666666666666,
+      "bear_recall": 0.4186046511627907,
+      "bear_f1": 0.5142857142857142,
+      "confusion_matrix": [
+        [
+          53,
+          9
+        ],
+        [
+          25,
+          18
+        ]
+      ]
+    },
+    "test_classification": {
+      "accuracy": 0.6666666666666666,
+      "balanced_accuracy": 0.614403600900225,
+      "macro_f1": 0.6031746031746031,
+      "non_bear_precision": 0.6588235294117647,
+      "non_bear_recall": 0.9032258064516129,
+      "non_bear_f1": 0.7619047619047619,
+      "bear_precision": 0.7,
+      "bear_recall": 0.32558139534883723,
+      "bear_f1": 0.4444444444444444,
+      "confusion_matrix": [
+        [
+          56,
+          6
+        ],
+        [
+          29,
+          14
+        ]
+      ]
+    },
+    "test_backtest": {
+      "soft_spy_cash": {
+        "name": "Soft SPY/Cash",
+        "cum_ret": 0.21155590533535218,
+        "ann_ret": 0.09649046694926544,
+        "ann_vol": 0.10611285193251213,
+        "sharpe": 0.43812286733027794,
+        "mdd": -0.12175734892584034,
+        "calmar": 0.7924816678460667
+      },
+      "hard_spy_cash": {
+        "name": "Hard SPY/Cash p_bear>=0.50",
+        "cum_ret": 0.12068039267877095,
+        "ann_ret": 0.056212374494005735,
+        "ann_vol": 0.12046480808787492,
+        "sharpe": 0.05157003603470666,
+        "mdd": -0.16386981693997527,
+        "calmar": 0.34303067852084107
+      }
+    }
+  },
+  "Random Forest": {
+    "valid_classification": {
+      "accuracy": 0.7619047619047619,
+      "balanced_accuracy": 0.7912603150787697,
+      "macro_f1": 0.7618183467924871,
+      "non_bear_precision": 0.9512195121951219,
+      "non_bear_recall": 0.6290322580645161,
+      "non_bear_f1": 0.7572815533980582,
+      "bear_precision": 0.640625,
+      "bear_recall": 0.9534883720930233,
+      "bear_f1": 0.7663551401869159,
+      "confusion_matrix": [
+        [
+          39,
+          23
+        ],
+        [
+          2,
+          41
+        ]
+      ]
+    },
+    "test_classification": {
+      "accuracy": 0.6857142857142857,
+      "balanced_accuracy": 0.6626031507876968,
+      "macro_f1": 0.6651850420330467,
+      "non_bear_precision": 0.7101449275362319,
+      "non_bear_recall": 0.7903225806451613,
+      "non_bear_f1": 0.7480916030534351,
+      "bear_precision": 0.6388888888888888,
+      "bear_recall": 0.5348837209302325,
+      "bear_f1": 0.5822784810126582,
+      "confusion_matrix": [
+        [
+          49,
+          13
+        ],
+        [
+          20,
+          23
+        ]
+      ]
+    },
+    "test_backtest": {
+      "soft_spy_cash": {
+        "name": "Soft SPY/Cash",
+        "cum_ret": 0.1810804866481468,
+        "ann_ret": 0.08316385008323168,
+        "ann_vol": 0.062416036553700864,
+        "sharpe": 0.5313354053601034,
+        "mdd": -0.05911317671679395,
+        "calmar": 1.4068580763585488
+      },
+      "hard_spy_cash": {
+        "name": "Hard SPY/Cash p_bear>=0.50",
+        "cum_ret": 0.19660961603542249,
+        "ann_ret": 0.08997665030735336,
+        "ann_vol": 0.08103300241800522,
+        "sharpe": 0.4933378884461857,
+        "mdd": -0.07387129887299915,
+        "calmar": 1.2180190639674933
+      }
+    }
+  },
+  "_config": {
+    "feature_mode": "summary(last, mean, std, min, max, recent5_mean)",
+    "threshold": 0.5,
+    "seed": 42,
+    "sklearn": true
+  }
+}

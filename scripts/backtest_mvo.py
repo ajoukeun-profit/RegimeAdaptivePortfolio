@@ -8,6 +8,7 @@ Regime-Conditioned MVO Backtest
 출력: outputs/results/backtest_mvo_results.json
       outputs/figures/fig7_mvo_comparison.png
 """
+import argparse
 import csv
 import json
 import sys
@@ -41,6 +42,30 @@ COST = 0.001
 RF   = 0.05
 PPY  = 252 / 5
 RF_P = RF / PPY   # 기간별 무위험수익률
+
+
+def build_arg_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description="Regime-conditioned MVO backtest")
+    parser.add_argument(
+        "--max-weight",
+        type=float,
+        default=1.0,
+        help="Maximum per-asset MVO weight. 1.0 reproduces the original unconstrained long-only run.",
+    )
+    parser.add_argument(
+        "--result-output",
+        type=Path,
+        default=Path("outputs/results/backtest_mvo_results.json"),
+    )
+    parser.add_argument(
+        "--figure-output",
+        type=Path,
+        default=Path("outputs/figures/fig_mvo_full_comparison.png"),
+    )
+    return parser
+
+
+args = build_arg_parser().parse_args()
 
 
 # ── 1. 데이터 로드 ────────────────────────────────────────────────
@@ -78,9 +103,11 @@ test_R  = returns_matrix(test_rows,  prices)   # (105, 4)
 
 
 # ── 3. 국면별 MVO: Sharpe 최대화 ─────────────────────────────────
-def max_sharpe_weights(R: np.ndarray, rf: float = RF_P) -> np.ndarray:
+def max_sharpe_weights(R: np.ndarray, rf: float = RF_P, max_weight: float = 1.0) -> np.ndarray:
     """Long-only, 합계=1 제약 하에서 Sharpe 최대화"""
     n = R.shape[1]
+    if max_weight * n < 1.0 - 1e-12:
+        raise ValueError(f"max_weight={max_weight} is infeasible for {n} assets")
     w0 = np.ones(n) / n
 
     def neg_sharpe(w):
@@ -92,7 +119,7 @@ def max_sharpe_weights(R: np.ndarray, rf: float = RF_P) -> np.ndarray:
     result = minimize(
         neg_sharpe, w0,
         method="SLSQP",
-        bounds=[(0.0, 1.0)] * n,
+        bounds=[(0.0, max_weight)] * n,
         constraints=[{"type": "eq", "fun": lambda w: w.sum() - 1}],
         options={"ftol": 1e-9, "maxiter": 500},
     )
@@ -103,12 +130,13 @@ REGIME_NAMES = {0: "Bear", 1: "Neutral", 2: "Bull"}
 mvo_w = {}
 
 print("\n[국면별 MVO 최적 비중]")
+print(f"max_weight cap: {args.max_weight:.1%}")
 print(f"{'국면':<10} {'샘플':>6}  {'SPY':>7} {'QQQ':>7} {'GLD':>7} {'TLT':>7}")
 print("─" * 50)
 for rid in [0, 1, 2]:
     mask = y_train == rid
     R_r  = train_R[mask]
-    w    = max_sharpe_weights(R_r)
+    w    = max_sharpe_weights(R_r, max_weight=args.max_weight)
     mvo_w[rid] = w
     print(f"{REGIME_NAMES[rid]:<10} {mask.sum():>6}  "
           + "  ".join(f"{v:>6.1%}" for v in w))
@@ -171,7 +199,7 @@ lstm_w = np.zeros((len(test_rows), 4))
 lstm_w[:, 0] = lstm_w_spy
 
 # Regime-Agnostic MVO: 국면 무시, 전체 훈련셋 단일 MVO (국면 conditioning 효과 비교용)
-agnostic_w_single = max_sharpe_weights(train_R)
+agnostic_w_single = max_sharpe_weights(train_R, max_weight=args.max_weight)
 agnostic_w = np.tile(agnostic_w_single, (len(test_rows), 1))
 
 # Oracle: HMM pseudo-label(y_test)로 비중 결정 (분류기 상한선)
@@ -218,7 +246,11 @@ Path("outputs/results").mkdir(parents=True, exist_ok=True)
 save = {k: {kk: (float(vv) if isinstance(vv, (int, float, np.floating)) else vv)
              for kk, vv in v.items() if not kk.startswith("_")}
         for k, v in results.items()}
-with open("outputs/results/backtest_mvo_results.json", "w") as f:
+save["_config"] = {
+    "max_weight": float(args.max_weight),
+}
+args.result_output.parent.mkdir(parents=True, exist_ok=True)
+with args.result_output.open("w", encoding="utf-8") as f:
     json.dump(save, f, indent=2, ensure_ascii=False)
 
 
@@ -254,7 +286,9 @@ ax.set_xlabel("Rebalancing Period (5-day intervals)")
 ax.set_ylabel("Cumulative Return (%)")
 ax.set_title(
     "Regime-Conditioned MVO vs Baselines  (2024.04 ~ 2026.05)\n"
-    "국면 conditioning: MDD -20.8% → -7.2%  |  Oracle 상한: -6.2%",
+    f"max_weight={args.max_weight:.0%} | "
+    f"국면 conditioning: MDD {r_agnostic['mdd']:.1%} → {r_ours['mdd']:.1%}"
+    f" | Oracle 상한: {r_oracle['mdd']:.1%}",
     fontsize=11, fontweight="bold")
 ax.legend(fontsize=8.5, loc="upper left")
 
@@ -264,9 +298,9 @@ ax.set_xticks(tick_idx[:len(tick_lbl)])
 ax.set_xticklabels(tick_lbl, rotation=30, fontsize=8)
 
 plt.tight_layout()
-Path("outputs/figures").mkdir(parents=True, exist_ok=True)
-plt.savefig("outputs/figures/fig_mvo_full_comparison.png", bbox_inches="tight", dpi=130)
+args.figure_output.parent.mkdir(parents=True, exist_ok=True)
+plt.savefig(args.figure_output, bbox_inches="tight", dpi=130)
 plt.close()
 
-print("\n저장: outputs/results/backtest_mvo_results.json")
-print("저장: outputs/figures/fig_mvo_full_comparison.png")
+print(f"\n저장: {args.result_output}")
+print(f"저장: {args.figure_output}")

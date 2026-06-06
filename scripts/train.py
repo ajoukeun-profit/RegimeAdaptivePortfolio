@@ -77,6 +77,9 @@ def make_json_serializable(obj):
 
 def load_dataset(path: Path):
     data = np.load(path, allow_pickle=True)
+    dataset_label_names = None
+    if "label_names" in data.files:
+        dataset_label_names = [str(x) for x in data["label_names"].tolist()]
 
     return (
         data["X_train"].astype(np.float32),
@@ -85,6 +88,16 @@ def load_dataset(path: Path):
         data["y_valid"].astype(np.int64),
         data["X_test"].astype(np.float32),
         data["y_test"].astype(np.int64),
+        dataset_label_names,
+    )
+
+
+def metric_key(name: str) -> str:
+    return (
+        name.lower()
+        .replace(" ", "_")
+        .replace("-", "_")
+        .replace("/", "_")
     )
 
 
@@ -340,16 +353,16 @@ def train(
         patience=max(1, patience // 2),
     )
 
+    cls_names = label_names[:num_classes]
     history = {
         "train_loss": [],
         "val_loss": [],
         "val_acc": [],
         "val_bal_acc": [],
-        "val_recall_bear": [],
-        "val_recall_neutral": [],
-        "val_recall_bull": [],
         "lr": [],
     }
+    for name in cls_names:
+        history[f"val_recall_{metric_key(name)}"] = []
 
     best_state = None
     best_epoch = 0
@@ -383,8 +396,8 @@ def train(
         f"{'Val Loss':>9}  "
         f"{'Val Acc':>8}  "
         f"{'Bal Acc':>8}  "
-        f"{'N-Rec':>8}  "
-        f"{'LR':>8}"
+            f"{cls_names[min(1, len(cls_names) - 1)][:8] + '-R':>8}  "
+            f"{'LR':>8}"
     )
     print("─" * 76)
 
@@ -452,9 +465,8 @@ def train(
         history["val_loss"].append(float(val_loss))
         history["val_acc"].append(float(val_acc))
         history["val_bal_acc"].append(float(val_bal_acc))
-        history["val_recall_bear"].append(float(val_recalls[0]))
-        history["val_recall_neutral"].append(float(val_recalls[1]) if len(val_recalls) > 1 else 0.0)
-        history["val_recall_bull"].append(float(val_recalls[2]) if len(val_recalls) > 2 else 0.0)
+        for i, name in enumerate(cls_names):
+            history[f"val_recall_{metric_key(name)}"].append(float(val_recalls[i]))
         history["lr"].append(float(current_lr))
 
         if epoch % print_every == 0 or epoch == 1:
@@ -464,7 +476,7 @@ def train(
                 f"{val_loss:>9.4f}  "
                 f"{val_acc:>7.1%}  "
                 f"{val_bal_acc:>7.1%}  "
-                f"{val_recalls[1]:>7.1%}  "
+                f"{val_recalls[min(1, len(val_recalls) - 1)]:>7.1%}  "
                 f"{current_lr:>8.2e}"
             )
 
@@ -479,6 +491,8 @@ def train(
             improved = val_bal_acc > best_score + 1e-4
             score_for_log = val_bal_acc
         elif best_metric == "val_neutral_recall":
+            if len(val_recalls) <= 1:
+                raise ValueError("val_neutral_recall requires at least 2 classes")
             improved = val_recalls[1] > best_score + 1e-4
             score_for_log = val_recalls[1]
         else:
@@ -683,7 +697,9 @@ if __name__ == "__main__":
     print(f"Seed: {args.seed}")
     print()
 
-    X_train, y_train, X_valid, y_valid, X_test, y_test = load_dataset(args.data)
+    X_train, y_train, X_valid, y_valid, X_test, y_test, dataset_label_names = load_dataset(args.data)
+    if dataset_label_names is not None:
+        label_names = dataset_label_names
 
     input_size = X_train.shape[-1]
 
@@ -696,7 +712,7 @@ if __name__ == "__main__":
     )
     print()
 
-    print_class_distribution(y_train, y_valid, y_test)
+    print_class_distribution(y_train, y_valid, y_test, num_classes=len(label_names))
 
     model, history = train(
         X_train=X_train,
@@ -734,10 +750,12 @@ if __name__ == "__main__":
         "history": history,
         "test_accuracy": float(acc),
         "test_balanced_accuracy": float(bal_acc),
-        "test_recall_bear": float(recalls[0]),
-        "test_recall_neutral": float(recalls[1]) if len(recalls) > 1 else 0.0,
-        "test_recall_bull": float(recalls[2]) if len(recalls) > 2 else 0.0,
+        "test_recalls": {
+            label_names[i]: float(recalls[i])
+            for i in range(len(recalls))
+        },
         "test_confusion_matrix": cm.tolist(),
+        "label_names": label_names[:len(recalls)],
         "args": make_json_serializable(vars(args)),
     }
 

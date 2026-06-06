@@ -50,19 +50,18 @@ hmm_regime_labeling.py
         │
         ▼
 spy_hmm_regime_labels_5d.csv (699행, 5거래일 간격 라벨)
-multi_asset_hmm_regime_labels_5d.csv (asset 컬럼 포함 통합 라벨)
         │
         ▼
 [Step 2: 지도학습 데이터셋 생성]  ← 팀원이 완성
 prepare_supervised_dataset.py
-prepare_multi_asset_supervised_dataset.py (다자산 확장)
+prepare_cross_asset_dataset.py (SPY 라벨 + 4자산 피처)
   - 30거래일 입력 window 생성
   - 10개 기술적 지표 feature 계산
   - train/valid/test 시간순 분리 + z-score 정규화
         │
         ▼
 spy_supervised_30d_5d.npz (딥러닝 입력 데이터)
-multi_asset_supervised_30d_5d.npz (SPY/QQQ/GLD/TLT 통합 학습 데이터)
+cross_asset_supervised_30d_5d.npz (SPY/QQQ/GLD/TLT 교차자산 피처)
         │
         ▼
 [Step 3: 딥러닝 모델 학습]  ← 내가 담당
@@ -120,11 +119,9 @@ date        hmm_label  hmm_label_code  prob_bear  prob_neutral  prob_bull  targe
 
 > **라벨 해석 주의**: Bull은 "주가가 반드시 오른다"는 뜻이 아니라, 해당 rolling window 안에서 Sharpe ratio가 가장 높은 state를 의미한다.
 
-다자산 확장 라벨은 `data/processed/multi_asset_hmm_regime_labels_5d.csv`에 저장한다. 이 파일은 `asset` 컬럼으로 SPY/QQQ/GLD/TLT를 구분하는 통합 라벨이며, 자산별 파일은 `data/processed/{asset}_hmm_regime_labels_5d.csv` 형식으로 저장한다.
+현재 최종 실험은 SPY HMM 라벨을 공통 target으로 사용하고, SPY/QQQ/GLD/TLT의 피처를 하나의 입력으로 합친 cross-asset 방식이다.
 
-> **사용 주의**: 현재 지도학습 데이터셋 생성 스크립트는 단일 raw CSV와 단일 labels CSV를 입력으로 받는다. 통합 라벨을 그대로 넣으면 SPY feature에 QQQ/GLD/TLT 라벨이 섞일 수 있으므로, 다자산 학습 데이터셋은 자산별 `(raw, labels)` 쌍으로 샘플을 만든 뒤 합쳐야 한다.
-
-다자산 학습용 배열은 `scripts/prepare_multi_asset_supervised_dataset.py`로 생성한다. 출력 파일은 `data/processed/multi_asset_supervised_30d_5d.npz`이며, 같은 target date의 네 자산 샘플이 같은 split에 들어가도록 나눈다.
+교차자산 학습용 배열은 `scripts/prepare_cross_asset_dataset.py`로 생성한다. 기본 출력 파일은 `data/processed/cross_asset_supervised_30d_5d.npz`이며, troubleshooting 실험에서는 binary hard/soft label 변형 데이터셋도 같은 스크립트로 생성한다.
 
 ---
 
