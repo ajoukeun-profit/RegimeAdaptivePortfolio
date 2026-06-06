@@ -1,10 +1,10 @@
-# Figure Guide
+# Figure 안내
 
 발표/보고서에 바로 쓰는 최종 그림은 `outputs/figures/final/` 폴더를 기준으로 사용한다.
 
-> Update note: 최근 troubleshooting 결과 최종 후보가 `Binary Regime-MVO Soft, cap 40%`로 바뀌었다. 현재 final figure는 새 결과 기준으로 재생성된 파일만 남겨둔다.
+> 업데이트 메모: 최근 troubleshooting 결과 최종 후보가 `Binary Regime-MVO Soft, cap 40%`로 바뀌었다. 현재 final figure는 새 결과 기준으로 재생성된 파일만 남겨둔다.
 
-| Figure | File | 내용 |
+| 그림 | 파일 | 내용 |
 |---|---|---|
 | Fig 01 | `final/fig01_pipeline.png` | HMM → Conv1D+LSTM → Regime-MVO 파이프라인 |
 | Fig 02 | `final/fig02_related_work.png` | 관련 연구 비교 |

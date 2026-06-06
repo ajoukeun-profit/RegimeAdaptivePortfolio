@@ -1,64 +1,88 @@
-# Troubleshooting Notes: Label, Optimization, and MVO Stability
+# 트러블슈팅 기록: Label, Optimization, MVO 안정성
 
-> Neutral label failure, pseudo-label reliability, and small-sample MVO estimation error.
-> This note summarizes the current diagnosis and the next experiments to try.
+> Neutral 라벨 식별 실패, HMM pseudo-label 신뢰성, 작은 샘플에서의 MVO 추정 오차를 정리한 문서입니다.
 
----
+## 1. 최종 결론
 
-## 1. Final Takeaway
-
-The strongest current direction is:
+현재 가장 설득력 있는 최종 방향은 다음이다.
 
 ```text
-Neutral failure
+Neutral label failure
 -> Bear vs Non-Bear binary classification
 -> Binary soft-label training
 -> 2-Regime MVO
 -> MVO weight cap 40%
 ```
 
-Why:
+핵심 이유:
 
-- Neutral is structurally ambiguous and the 3-class model never predicts Neutral on test.
-- Binary classification improves balanced accuracy from 51.9% to 70.2%.
-- Binary soft labels improve Bear recall from 58.1% to 67.4%.
-- MVO caps reduce concentration caused by small-sample estimation error.
-- Binary Regime-MVO Soft with cap 40% gives the best current balanced portfolio result.
+- Neutral은 구조적으로 애매해서 3-class 모델이 test에서 한 번도 Neutral을 예측하지 못했다.
+- Binary classification으로 바꾸자 Balanced Accuracy가 51.9%에서 70.2%로 개선됐다.
+- Binary soft label을 쓰자 Bear Recall이 58.1%에서 67.4%로 개선됐다.
+- MVO weight cap은 작은 샘플에서 발생하는 자산 몰빵 문제를 완화했다.
+- 최종적으로 `Binary Regime-MVO Soft, cap 40%`가 현재 비교군 중 가장 균형 잡힌 결과를 냈다.
 
-Key result:
+최종 비교 결과:
 
 | Strategy | Cumulative Return | Sharpe | MDD | Calmar |
 |---|---:|---:|---:|---:|
 | 60/40 | 28.3% | 0.84 | -10.4% | 1.22 |
 | Buy & Hold | 49.9% | 1.07 | -17.0% | 1.26 |
 | EW 1/N | 50.9% | 1.41 | -8.8% | 2.47 |
-| 3-class Regime-MVO, cap 40% | 51.9% | 1.46 | -9.0% | 2.47 |
-| Binary Regime-MVO Soft, cap 40% | 53.7% | 1.48 | -9.0% | 2.55 |
+| 3-class Regime-MVO cap 40% | 51.9% | 1.46 | -9.0% | 2.47 |
+| **Binary Regime-MVO Soft cap 40%** | **53.7%** | **1.48** | **-9.0%** | **2.55** |
 
-Interpretation:
+해석:
 
-Binary Regime-MVO Soft with cap 40% has the highest cumulative return among the current comparable strategies. Compared with EW 1/N, it improves cumulative return by 2.8 percentage points while keeping MDD almost the same. Compared with 3-class capped Regime-MVO, it improves cumulative return by 1.8 percentage points and Calmar from 2.47 to 2.55.
+Binary Regime-MVO Soft cap 40%는 EW 1/N보다 누적수익률이 2.8%p 높고, MDD는 거의 비슷하다. 3-class capped Regime-MVO와 비교해도 누적수익률과 Calmar가 소폭 개선된다.
 
 ---
 
-## 2. Current Diagnosis
+## 2. 지금 문제가 gradient 폭발/소멸인가?
 
-The project is not mainly failing because of gradient explosion or vanishing gradient. The clearest problems are:
+현재 관찰된 가장 큰 문제는 gradient 폭발이나 소멸이라기보다 **label 정의와 MVO 추정 안정성 문제**에 가깝다.
 
-1. Neutral label identification failure
-2. HMM pseudo-label reliability
-3. MVO estimation error under small regime-specific samples
+### Gradient 폭발
 
-The final model still has useful Bear/Bull discrimination, but the Neutral class is structurally weak.
+학습 코드에서는 이미 gradient clipping을 적용하고 있다.
 
-Final result evidence:
+위치: `scripts/train.py`
 
-- `outputs/results/train_history.json`
-- Accuracy: 61.9%
-- Balanced Accuracy: 51.9%
-- Bear Recall: 60.5%
-- Neutral Recall: 0.0%
-- Bull Recall: 95.1%
+```python
+loss.backward()
+nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+optimizer.step()
+```
+
+따라서 gradient 폭발은 어느 정도 제어되고 있다. 학습 기록에서도 NaN이나 loss divergence는 확인되지 않았다.
+
+다만 gradient norm을 직접 logging하지는 않으므로, clipping이 얼마나 자주 발생하는지는 아직 알 수 없다.
+
+### Gradient 소멸
+
+모델 입력은 30일 sequence이고 LSTM hidden size도 크지 않다. 매우 긴 sequence에서 나타나는 심각한 vanishing gradient 가능성은 상대적으로 낮다.
+
+하지만 layer별 gradient norm이나 hidden-state 통계를 기록하지 않았으므로, 완전히 배제할 수는 없다.
+
+현재 결론:
+
+> gradient 문제는 가능성으로 남아 있지만, 실제 실패 양상은 Neutral label ambiguity와 MVO estimation error가 훨씬 명확하다.
+
+---
+
+## 3. 문제 A: Neutral 라벨 식별 실패
+
+### 현상
+
+3-class hard-label 모델 결과:
+
+| Metric | Value |
+|---|---:|
+| Accuracy | 61.9% |
+| Balanced Accuracy | 51.9% |
+| Bear Recall | 60.5% |
+| Neutral Recall | 0.0% |
+| Bull Recall | 95.1% |
 
 Confusion matrix:
 
@@ -69,690 +93,129 @@ Actual Neutral     8          0           13
 Actual Bull        2          0           39
 ```
 
-This means the model never predicts Neutral on the test set. It maps ambiguous middle regimes into Bear or Bull.
+모델이 test set에서 Neutral을 한 번도 예측하지 않았다.
 
----
+### 왜 발생했나
 
-## 3. Gradient Explosion and Vanishing Gradient
+Neutral은 Bear와 Bull 사이의 중간 상태다. HMM이 만든 state를 사후적으로 Sharpe, 수익률, 변동성 기준으로 Bear / Neutral / Bull에 매핑했기 때문에 Neutral은 경제적 경계가 명확하지 않다.
 
-### Gradient Explosion
+즉, Neutral은 다음 두 경계가 모두 애매하다.
 
-The training code already applies gradient clipping.
+- Bear vs Neutral
+- Neutral vs Bull
 
-Location: `scripts/train.py`
+그 결과 모델은 더 쉬운 Bear/Bull 분리 문제를 학습하고, Neutral은 Bear 또는 Bull로 흡수해버린다.
 
-```python
-loss.backward()
-nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
-optimizer.step()
-```
+### 기존 시도
 
-This means gradient explosion is being actively controlled. The recorded train/validation losses do not show NaN or unstable divergence, so there is no strong evidence that gradient explosion is the main issue.
+`neutral_boost`를 통해 Neutral class weight를 높였다.
 
-However, gradient norm is not currently logged. Therefore, the exact frequency or severity of clipping is unknown.
-
-### Vanishing Gradient
-
-The model uses a 30-day sequence and a small LSTM hidden size. This makes severe vanishing gradient less likely than in very long sequence problems.
-
-But the project does not log layer-wise gradient norms or hidden-state statistics. Therefore, vanishing gradient cannot be confirmed or rejected from current evidence.
-
-Conclusion:
-
-> Gradient issues are possible, but the observed failure mode is much more clearly a label definition and estimation problem.
-
----
-
-## 4. Problem A: Neutral Label Identification Failure
-
-### Why It Happens
-
-Neutral is not a sharply defined economic regime. In this project, HMM states are mapped to Bear, Neutral, and Bull by relative Sharpe/statistical properties. Neutral is effectively the middle state between high-risk Bear and high-return Bull.
-
-This creates two difficulties:
-
-- The boundary between Bear and Neutral is unclear.
-- The boundary between Neutral and Bull is also unclear.
-
-As a result, the model can improve overall accuracy by learning a simpler Bear/Bull separation and ignoring Neutral.
-
-### Current Attempt
-
-The project already tried to mitigate this with class weighting and `neutral_boost`.
-
-Location: `scripts/train.py`
+위치: `scripts/train.py`
 
 ```python
 weights = n_samples / (float(num_classes) * counts)
 weights[1] *= neutral_boost
 ```
 
-But this creates a trade-off:
+하지만 class weight를 높이면 trade-off가 생긴다.
 
-- Higher Neutral weight improves Neutral recall.
-- Bear and Bull recall often drop.
+- Neutral recall은 일부 개선될 수 있다.
+- 대신 Bear/Bull recall과 전체 성능이 떨어질 수 있다.
 
-Prior experiment evidence:
+실험상 `neutral_boost=1.2`가 전체적으로는 더 안정적이었지만, Neutral Recall 0.0% 문제 자체는 해결하지 못했다.
 
-- `neutral_boost=2.0`: Neutral recall improved, but total accuracy and Bear/Bull performance dropped.
-- `neutral_boost=1.2`: Better overall model, but Neutral recall remained 0.0%.
+---
 
-### Candidate Fix 1: Bear vs Non-Bear
+## 4. 해결 1: Bear vs Non-Bear Binary Classification
 
-This is the most practical first experiment.
+Neutral을 억지로 따로 맞히기보다, 투자 목적에 맞게 문제를 다시 정의했다.
 
-Instead of forcing three classes:
+기존:
 
 ```text
 Bear / Neutral / Bull
 ```
 
-convert the target into:
+변경:
 
 ```text
 Bear / Non-Bear
+Non-Bear = Neutral + Bull
 ```
 
-This matches the project's economic objective better. The strategy is primarily about risk control, so detecting Bear regimes is more important than separating Neutral from Bull.
+이 방식이 더 적절한 이유:
 
-Possible target conversion:
+- 프로젝트의 핵심은 하방 위험 관리다.
+- Bear 탐지가 Neutral/Bull 세부 분리보다 중요하다.
+- Neutral의 애매한 경계를 제거할 수 있다.
+- binary 확률을 2-Regime MVO로 자연스럽게 연결할 수 있다.
 
-```python
-y = 1 if int(target["hmm_label_code"]) == 0 else 0
-```
-
-Expected benefit:
-
-- Removes the ambiguous Neutral boundary.
-- Directly optimizes the risk-detection task.
-- Easier to explain in presentation: "we reframed the problem as downside-risk detection."
-
-Expected risk:
-
-- The model no longer gives separate Neutral/Bull probabilities.
-- Regime-MVO must be adjusted into binary regime MVO.
-
----
-
-## 5. Problem B: Pseudo-Label Reliability
-
-### Why It Matters
-
-HMM labels are not true market labels. They are pseudo-labels generated by a statistical model.
-
-Therefore, a hard HMM label can overstate certainty. For example, a row with probabilities:
-
-```text
-Bear 0.42 / Neutral 0.39 / Bull 0.19
-```
-
-may become a hard Bear label, even though the HMM itself is uncertain.
-
-Training with hard labels treats Neutral and Bull as completely wrong for this sample, which can inject label noise into the classifier.
-
-### Candidate Fix 2: Soft Labels
-
-Use HMM probabilities as training targets:
-
-```text
-[prob_bear, prob_neutral, prob_bull]
-```
-
-instead of:
-
-```text
-hmm_label_code
-```
-
-Current hard-label target location:
-
-- `scripts/prepare_supervised_dataset.py`
-- `scripts/prepare_cross_asset_dataset.py`
-
-Current idea:
-
-```python
-y = int(target["hmm_label_code"])
-```
-
-Soft-label alternative:
-
-```python
-y_soft = [
-    float(target["prob_bear"]),
-    float(target["prob_neutral"]),
-    float(target["prob_bull"]),
-]
-```
-
-Training loss:
-
-```python
-log_probs = torch.log_softmax(logits, dim=1)
-loss = -(soft_targets * log_probs).sum(dim=1).mean()
-```
-
-Expected benefit:
-
-- Preserves HMM uncertainty.
-- Reduces the damage from ambiguous Neutral labels.
-- Keeps the 3-class regime probability output.
-
-Expected risk:
-
-- Requires dataset and training-loop changes.
-- Evaluation is less straightforward because targets are distributions rather than single labels.
-
-Recommended evaluation:
-
-- Still report hard-label accuracy by comparing `argmax(pred)` to `argmax(soft_target)`.
-- Also report KL divergence or soft cross entropy.
-- Most importantly, run the portfolio backtest.
-
-### Candidate Fix 3: Confidence Filtering or Sample Weighting
-
-Use HMM confidence to decide how strongly each sample contributes.
-
-Example:
-
-```python
-confidence = max(prob_bear, prob_neutral, prob_bull)
-```
-
-Options:
-
-- Drop low-confidence samples.
-- Keep all samples but multiply loss by confidence.
-- Use only high-confidence samples for training and all samples for validation/test.
-
-Expected benefit:
-
-- Reduces pseudo-label noise.
-
-Expected risk:
-
-- The dataset is already small, so dropping samples can hurt.
-
-For that reason, confidence weighting is safer than hard filtering.
-
----
-
-## 6. Problem C: Small-Sample MVO Estimation Error
-
-### Why It Happens
-
-MVO estimates expected return and risk from historical samples. In this project, MVO is computed separately per regime.
-
-Location: `scripts/backtest_mvo.py`
-
-```python
-def max_sharpe_weights(R: np.ndarray, rf: float = RF_P) -> np.ndarray:
-```
-
-This creates a small-sample problem:
-
-- The full training set is already small.
-- Splitting it into Bear/Neutral/Bull makes each regime sample smaller.
-- Sharpe maximization is sensitive to noisy mean and volatility estimates.
-- The optimizer can choose extreme weights, such as one asset at 100%.
-
-This is visible in the 2022 stress test: Bear MVO selected TLT-heavy defense, but 2022 was a rate-hike Bear where long-duration bonds also fell.
-
-### Candidate Fix 4: Add Weight Constraints
-
-Current bounds:
-
-```python
-bounds=[(0.0, 1.0)] * n
-```
-
-Possible more conservative bounds:
-
-```python
-bounds=[(0.0, 0.6)] * n
-```
-
-Expected benefit:
-
-- Prevents extreme single-asset concentration.
-- Makes MVO less sensitive to noisy estimates.
-
-Expected risk:
-
-- May reduce upside in regimes where concentrated exposure worked.
-
-### Candidate Fix 5: Add Cash or Short-Term Bond Defense
-
-The current asset set is:
-
-```text
-SPY / QQQ / GLD / TLT
-```
-
-In 2022, TLT failed as a defensive asset because interest rates rose sharply. A more robust defensive universe should include:
-
-- Cash
-- Short-term Treasury ETF
-- Money-market proxy
-- Short-duration bond ETF
-
-Expected benefit:
-
-- Better behavior in rate-hike Bear markets.
-
-Expected risk:
-
-- Requires additional data and careful benchmark consistency.
-
-### Candidate Fix 6: Shrinkage or Simpler Portfolio Rules
-
-Alternatives to pure Sharpe-max MVO:
-
-- Minimum variance portfolio
-- Mean-variance objective with explicit risk aversion
-- Covariance shrinkage
-- Blend MVO weights with equal weight
-- Add turnover penalty
-
-Example blending:
-
-```python
-w_final = 0.7 * w_mvo + 0.3 * w_equal
-```
-
-This reduces estimator-driven extreme allocations.
-
----
-
-## 7. Classical ML Baselines
-
-Because the dataset is small, classical ML baselines are important.
-
-Recommended models:
-
-- Logistic Regression for Bear vs Non-Bear
-- Random Forest for Bear vs Non-Bear
-- Random Forest for 3-class classification
-- Possibly Gradient Boosting if dependency constraints allow it
-
-Purpose:
-
-> These are not just backup models. They test whether Conv1D+LSTM is actually adding value beyond simpler decision rules.
-
-If Logistic Regression or Random Forest performs similarly to LSTM, that is not necessarily bad. It means the core contribution is not model complexity, but the regime-aware portfolio pipeline.
-
-Suggested features for classical baselines:
-
-- Flatten `(30, 40)` into 1200 features
-- Or use summary features over the 30-day window:
-  - latest value
-  - mean
-  - standard deviation
-  - min/max
-  - recent 5-day mean
-
-The summary-feature version may generalize better because the sample size is small.
-
----
-
-## 8. Experiment Results
-
-### Priority 1: Bear vs Non-Bear Classification
-
-Reason:
-
-- Directly targets the project's main goal: downside-risk detection.
-- Easiest way to remove the Neutral ambiguity.
-- Best fit for the current result, where Bear and Bull are learnable but Neutral is not.
-
-Implementation scope:
-
-- Add binary dataset generation option.
-- Train `train.py` with `num_classes=2`.
-- Evaluate Bear recall, precision, F1, and balanced accuracy.
-- Run a binary 2-Regime MVO backtest.
-
-Success criteria:
-
-- Bear recall improves or remains near 60%.
-- False Bear signals do not destroy upside too much.
-- MDD and Calmar improve or remain competitive.
-
-First run result:
-
-Command:
-
-```bash
-python3 scripts/prepare_cross_asset_dataset.py \
-  --binary-bear \
-  --output data/processed/cross_asset_supervised_30d_5d_binary_bear.npz \
-  --index-output data/processed/cross_asset_supervised_30d_5d_binary_bear_index.csv \
-  --meta-output data/processed/cross_asset_supervised_30d_5d_binary_bear_meta.json
-
-python3 scripts/train.py \
-  --data data/processed/cross_asset_supervised_30d_5d_binary_bear.npz \
-  --model-output outputs/models/best_model_binary_bear.pt \
-  --history-output outputs/results/train_history_binary_bear.json \
-  --epochs 80 --patience 10 --batch-size 16 \
-  --lr 1e-4 --conv-channels 16 --lstm-hidden 32 \
-  --dropout 0.6 --weight-decay 1e-2 \
-  --neutral-boost 1.0 --best-metric val_bal_acc --seed 42
-```
-
-Output files:
-
-- `data/processed/cross_asset_supervised_30d_5d_binary_bear.npz`
-- `outputs/models/best_model_binary_bear.pt`
-- `outputs/results/train_history_binary_bear.json`
-
-Binary split:
-
-| Split | Non-Bear | Bear |
-|---|---:|---:|
-| Train | 339 | 149 |
-| Valid | 62 | 43 |
-| Test | 62 | 43 |
-
-Test result:
+Binary hard-label 결과:
 
 | Metric | Value |
 |---|---:|
 | Accuracy | 72.4% |
 | Balanced Accuracy | 70.2% |
-| Macro F1 | 70.6% |
 | Non-Bear Recall | 82.3% |
 | Bear Recall | 58.1% |
 
-Confusion matrix:
+비교:
 
-```text
-                 Pred Non-Bear  Pred Bear
-Actual Non-Bear       51           11
-Actual Bear           18           25
-```
+| Model | Balanced Accuracy | Bear Recall |
+|---|---:|---:|
+| 3-class hard label | 51.9% | 60.5% |
+| Binary hard label | 70.2% | 58.1% |
 
-Interpretation:
+해석:
 
-The binary task is much cleaner than the 3-class task. It removes the Neutral identification failure and produces a high balanced accuracy. Bear recall is 58.1%, slightly below the 3-class final model's 60.5%, but the binary model is easier to interpret and better aligned with downside-risk detection.
+Bear Recall만 보면 3-class가 약간 높아 보이지만, 3-class는 Neutral을 전혀 예측하지 못한다. Binary는 문제 정의가 더 명확하고 Balanced Accuracy가 크게 개선되어 최종 포트폴리오 전략과 더 잘 맞는다.
 
-Next check:
+---
 
-- Connect the binary probabilities to 2-Regime MVO.
-- Compare the resulting portfolio against EW 1/N, Buy & Hold, 60/40, and 3-class Regime-MVO.
+## 5. 해결 2: LR / RF Baseline
 
-### Priority 2: Constrained MVO
+데이터 수가 작기 때문에 딥러닝이 정말 필요한지 확인해야 했다. 그래서 Logistic Regression과 Random Forest를 baseline으로 두고 비교했다.
 
-Reason:
-
-- The current Regime-MVO has a known estimation-risk issue.
-- This can be improved without changing the classifier.
-- It directly addresses the 2022 weakness.
-
-Implementation scope:
-
-- Change MVO bounds from `(0.0, 1.0)` to `(0.0, 0.6)` or test several caps.
-- Try MVO/equal-weight blending.
-- Re-run `backtest_mvo.py`.
-
-Success criteria:
-
-- MDD remains low.
-- 2022 stress test improves.
-- Cumulative return does not collapse.
-
-First run result:
-
-The MVO script was extended with a `--max-weight` option so each asset's regime-level MVO weight can be capped.
-
-Command examples:
-
-```bash
-python3 scripts/backtest_mvo.py \
-  --max-weight 0.6 \
-  --result-output outputs/results/backtest_mvo_cap60_results.json
-
-python3 scripts/backtest_mvo.py \
-  --max-weight 0.5 \
-  --result-output outputs/results/backtest_mvo_cap50_results.json
-
-python3 scripts/backtest_mvo.py \
-  --max-weight 0.4 \
-  --result-output outputs/results/backtest_mvo_cap40_results.json
-```
-
-Regime-level MVO weights:
-
-| Cap | Bear | Neutral | Bull |
-|---:|---|---|---|
-| 60% | QQQ 11.9%, GLD 28.1%, TLT 60.0% | SPY 51.4%, GLD 48.6% | SPY 60.0%, QQQ 40.0% |
-| 50% | QQQ 7.3%, GLD 42.7%, TLT 50.0% | SPY 50.0%, GLD 50.0% | SPY 50.0%, QQQ 50.0% |
-| 40% | QQQ 20.0%, GLD 40.0%, TLT 40.0% | SPY 40.0%, QQQ 4.5%, GLD 40.0%, TLT 15.5% | SPY 40.0%, QQQ 40.0%, GLD 7.4%, TLT 12.6% |
-
-Backtest result:
-
-| Strategy | Cumulative Return | Sharpe | MDD | Calmar |
-|---|---:|---:|---:|---:|
-| Original Regime-MVO | 35.3% | 1.10 | -7.2% | 2.16 |
-| Cap 60% Regime-MVO | 49.8% | 1.42 | -8.8% | 2.44 |
-| Cap 50% Regime-MVO | 54.2% | 1.50 | -9.4% | 2.45 |
-| Cap 40% Regime-MVO | 51.9% | 1.46 | -9.0% | 2.47 |
-| EW 1/N Benchmark | 50.9% | 1.41 | -8.8% | 2.47 |
-
-Interpretation:
-
-Constrained MVO reduces extreme single-asset concentration and materially improves cumulative return and Sharpe versus the original unconstrained Regime-MVO. However, it gives up some drawdown protection. The original Regime-MVO still has the lowest MDD among the MVO variants, while the capped versions are more competitive with EW 1/N on return and Sharpe.
-
-Best current reading:
-
-- If the goal is pure drawdown minimization, the original Regime-MVO still has lower MDD than capped variants.
-- If the goal is a more balanced risk-return strategy, cap 50% or cap 40% is more attractive.
-- Cap 40% is close to EW 1/N in MDD and Calmar, while keeping regime-conditioned dynamic allocation.
-
-Important caution:
-
-The cap values were checked on the test period as exploratory diagnostics. A final cap should be chosen through validation or walk-forward testing, not by selecting the best test-period metric.
-
-### Priority 3: Classical ML Baselines
-
-Reason:
-
-- Small sample size makes Logistic Regression and Random Forest credible.
-- Useful as a sanity check for whether LSTM complexity is justified.
-
-Implementation scope:
-
-- Start with binary Bear vs Non-Bear.
-- Compare Logistic Regression, Random Forest, and current LSTM.
-- Use time-based train/valid/test only.
-
-Success criteria:
-
-- Establish a simple baseline.
-- If baseline is competitive, use it in the report as robustness evidence.
-
-After creating a local virtual environment, the official scikit-learn baselines were tested.
-
-Command:
+실행:
 
 ```bash
 .venv/bin/python scripts/baseline_binary_bear_sklearn.py
 ```
 
-Output:
-
-- `outputs/results/baseline_binary_bear_sklearn_results.json`
-
-Result:
+결과:
 
 | Model | Valid Balanced Acc | Test Balanced Acc | Bear Recall |
 |---|---:|---:|---:|
-| Sklearn Logistic Regression | 63.7% | 61.4% | 32.6% |
-| Sklearn Random Forest | 79.1% | 66.3% | 53.5% |
+| Logistic Regression | 63.7% | 61.4% | 32.6% |
+| Random Forest | 79.1% | 66.3% | 53.5% |
 | Conv1D+LSTM Binary | 85.2% | 70.2% | 58.1% |
 
-Interpretation:
+해석:
 
-Random Forest is a useful comparator and detects more Bear samples than Logistic Regression, but the binary Conv1D+LSTM remains stronger on test balanced accuracy and Bear recall.
+LR < RF < LSTM 흐름이 확인됐다. Random Forest도 꽤 강한 baseline이지만, test balanced accuracy와 Bear Recall 모두에서 Conv1D+LSTM이 더 좋았다. 따라서 시계열 패턴을 학습하는 딥러닝 모델의 효과가 있다고 볼 수 있다.
 
-Environment note:
+---
 
-The virtual environment is ignored through `.gitignore` via `.venv/`.
+## 6. 해결 3: Binary Soft Label
 
-### Priority 4: Soft-Label Training
+Hard label은 HMM posterior의 불확실성을 버린다.
 
-Reason:
-
-- Conceptually strong and directly addresses pseudo-label uncertainty.
-- But it requires more training-loop changes than binary classification.
-
-Implementation scope:
-
-- Save HMM probability vectors as targets.
-- Implement soft cross entropy.
-- Compare hard-label 3-class vs soft-label 3-class.
-- Backtest the resulting probabilities.
-
-Success criteria:
-
-- Better calibration of regime probabilities.
-- Neutral probability becomes useful even if hard Neutral recall stays low.
-- Portfolio metrics improve.
-
-First run result:
-
-The cross-asset dataset builder was extended with a `--soft-labels` option. Instead of using only `hmm_label_code`, it now also saves HMM posterior probabilities:
+예를 들어 HMM posterior가 다음과 같다고 하자.
 
 ```text
-prob_bear / prob_neutral / prob_bull
+Bear 0.42 / Neutral 0.39 / Bull 0.19
 ```
 
-Cleanup note:
+Hard label은 이를 Bear 하나로만 취급한다. 하지만 실제로는 Neutral 가능성도 크다.
 
-The 3-class soft-label artifacts were diagnostic only and are not retained in the cleaned output folder. The retained final soft-label path is the binary version used by 2-Regime MVO.
-
-Important dataset observation:
-
-| Split | Mean HMM Confidence |
-|---|---:|
-| Train | 98.7% |
-| Valid | 99.4% |
-| Test | 97.9% |
-
-This means the HMM posterior probabilities are already very close to hard labels. Therefore, soft-label training may not change the model behavior much unless the HMM itself produces more uncertain probability vectors.
-
-Classification result:
-
-| Metric | Value |
-|---|---:|
-| Accuracy | 61.9% |
-| Balanced Accuracy | 51.9% |
-| Macro F1 | 45.5% |
-| Soft CE | 1.0194 |
-| Bear Recall | 60.5% |
-| Neutral Recall | 0.0% |
-| Bull Recall | 95.1% |
-
-Backtest result:
-
-| Strategy | Cumulative Return | Sharpe | MDD | Calmar |
-|---|---:|---:|---:|---:|
-| Buy & Hold | 49.9% | 1.07 | -17.0% | 1.26 |
-| EW 1/N | 50.9% | 1.41 | -8.8% | 2.47 |
-| 60/40 | 28.3% | 0.84 | -10.4% | 1.22 |
-| Regime-MVO SoftLabel | 34.8% | 1.08 | -7.1% | 2.17 |
-| Oracle (HMM labels) | 41.6% | 1.16 | -6.2% | 2.91 |
-
-Note: the earlier auxiliary threshold-style stock/cash diagnostic is intentionally omitted here because the final project story is MVO-based.
-
-Interpretation:
-
-Soft-label training did not solve the Neutral recall problem. The result is nearly identical to the hard-label 3-class model: Bear and Bull are learned, but Neutral is still not selected as the final argmax prediction. This does not invalidate the soft-label idea, but it shows that the current HMM probabilities are too confident to meaningfully smooth the labels.
-
-### Priority 5: Confidence Weighting
-
-Reason:
-
-- Useful after soft-label or hard-label baselines are established.
-- Dropping samples is risky because the dataset is small.
-
-Implementation scope:
-
-- Compute `confidence = max(HMM probabilities)`.
-- Weight each training sample's loss by confidence.
-- Avoid hard filtering at first.
-
-Success criteria:
-
-- Lower validation instability.
-- Better balanced accuracy or better portfolio metrics.
-
-First run result:
-
-The soft-label training script was rerun with confidence-weighted loss:
-
-```python
-confidence = max(prob_bear, prob_neutral, prob_bull)
-```
-
-Cleanup note:
-
-The 3-class confidence-weighting artifacts were diagnostic only and are not retained in the cleaned output folder.
-
-Classification result:
-
-| Metric | Soft Label | Soft Label + Confidence |
-|---|---:|---:|
-| Accuracy | 61.9% | 61.0% |
-| Balanced Accuracy | 51.9% | 51.1% |
-| Macro F1 | 45.5% | 44.9% |
-| Soft CE | 1.0194 | 1.0069 |
-| Bear Recall | 60.5% | 58.1% |
-| Neutral Recall | 0.0% | 0.0% |
-| Bull Recall | 95.1% | 95.1% |
-
-Backtest result:
-
-| Strategy | Soft Label | Soft Label + Confidence |
-|---|---:|---:|
-| Regime-MVO cumulative return | 34.8% | 33.5% |
-| Regime-MVO Sharpe | 1.08 | 1.05 |
-| Regime-MVO MDD | -7.1% | -7.1% |
-| Regime-MVO Calmar | 2.17 | 2.08 |
-
-Note: threshold-style stock/cash diagnostics were excluded from the final documentation to keep the portfolio story aligned with Regime-MVO.
-
-Interpretation:
-
-Confidence weighting slightly improves soft cross entropy, but it does not improve hard classification or portfolio performance. The likely reason is the same as Priority 4: the HMM confidence is already very high for most samples, so multiplying by confidence barely changes the effective training distribution.
-
-Current conclusion for Priorities 4 and 5:
-
-Soft labels and confidence weighting were implemented and tested, but they are not the best path for the current data. The stronger practical findings are:
-
-- Binary Bear vs Non-Bear is the clearest fix for Neutral failure.
-- Constrained MVO is the clearest fix for MVO concentration risk.
-- Classical baselines confirm that the binary Conv1D+LSTM is still useful.
-
-### Follow-up: Binary Soft-Label Training
-
-Question:
-
-If Bear vs Non-Bear worked better than 3-class classification, should soft-label training also be applied to the binary target?
-
-Answer:
-
-Yes. The 3-class soft-label experiment was a diagnostic test for whether preserving `Bear / Neutral / Bull` HMM uncertainty would fix Neutral failure. But the practical risk-management direction is binary. Therefore, the more aligned soft-label target is:
+따라서 HMM posterior를 binary soft target으로 합쳤다.
 
 ```text
+P(Bear) = P(Bear)
 P(Non-Bear) = P(Neutral) + P(Bull)
-P(Bear)     = P(Bear)
 ```
 
-Implementation:
-
-The dataset builder now allows `--binary-bear --soft-labels` together.
-
-Command:
+실행:
 
 ```bash
 python3 scripts/prepare_cross_asset_dataset.py \
@@ -765,19 +228,10 @@ python3 scripts/train_soft_labels.py \
   --data data/processed/cross_asset_supervised_30d_5d_binary_soft_labels.npz \
   --index data/processed/cross_asset_supervised_30d_5d_binary_soft_labels_index.csv \
   --model-output outputs/models/best_model_binary_soft_labels.pt \
-  --history-output outputs/results/train_history_binary_soft_labels.json \
-  --epochs 80 --patience 10 --batch-size 16 \
-  --lr 1e-4 --conv-channels 16 --lstm-hidden 32 \
-  --dropout 0.6 --weight-decay 1e-2 --seed 42
+  --history-output outputs/results/train_history_binary_soft_labels.json
 ```
 
-Output files:
-
-- `data/processed/cross_asset_supervised_30d_5d_binary_soft_labels.npz`
-- `outputs/models/best_model_binary_soft_labels.pt`
-- `outputs/results/train_history_binary_soft_labels.json`
-
-Classification comparison:
+결과:
 
 | Model | Accuracy | Balanced Accuracy | Macro F1 | Non-Bear Recall | Bear Recall |
 |---|---:|---:|---:|---:|---:|
@@ -785,56 +239,48 @@ Classification comparison:
 | Binary Soft Label | 73.3% | 72.4% | 72.4% | 77.4% | 67.4% |
 | Binary Soft Label + Confidence | 73.3% | 72.4% | 72.4% | 77.4% | 67.4% |
 
-Interpretation:
+해석:
 
-Binary soft-label training is better than binary hard-label training on classification, especially Bear recall. Bear recall improves from 58.1% to 67.4%, which is useful for downside-risk detection.
+Binary soft label은 hard label보다 Bear Recall을 크게 개선했다. 하방 위험 탐지가 중요한 프로젝트 목적과 잘 맞는다.
 
-However, classification improvement alone is not the final objective. Since this project is built around regime-conditioned MVO, the binary soft-label probabilities should be evaluated through a 2-Regime MVO strategy.
+Confidence weighting은 binary soft label과 거의 같은 결과를 냈다. HMM posterior가 이미 대부분 특정 state에 강하게 몰려 있어서 confidence를 곱해도 학습 분포가 크게 달라지지 않았기 때문으로 보인다.
 
-Best current reading:
+---
 
-- For classification: Binary Soft Label is the strongest binary classifier so far.
-- Since the project's main portfolio story is Regime-MVO, Binary Soft Label should be connected to a 2-regime MVO strategy.
+## 7. 문제 B: 작은 샘플에서의 MVO 추정 오차
 
-### Follow-up: Binary Soft Label + 2-Regime MVO
+MVO는 기대수익률과 공분산을 추정해서 weight를 계산한다. 그런데 regime별로 데이터를 나누면 각 regime의 샘플 수가 줄어든다.
 
-Question:
+이때 Sharpe-max MVO는 작은 추정 오차에도 민감하게 반응해 특정 자산에 몰빵하기 쉽다.
 
-If Binary Soft Label is the best classifier so far, should it be applied to MVO?
+Binary MVO에서 cap이 없을 때:
 
-Answer:
+| Cap | Non-Bear MVO | Bear MVO |
+|---|---|---|
+| None | SPY 100% | TLT 100% |
 
-Yes. The cleaner project-consistent strategy is 2-Regime MVO:
+이런 비중은 과거 훈련 구간에는 좋아 보일 수 있지만, test 기간에는 추정 오차에 취약하다.
 
-```text
-Non-Bear MVO = MVO weights estimated from train samples labeled Neutral or Bull
-Bear MVO     = MVO weights estimated from train samples labeled Bear
+---
 
-test weight = P(Non-Bear) * Non-Bear MVO + P(Bear) * Bear MVO
-```
+## 8. 해결 4: MVO Weight Cap
 
-This keeps the main project pipeline:
+자산별 최대 비중을 제한하는 cap을 추가했다.
 
-```text
-regime prediction -> regime-conditioned MVO allocation
-```
+위치:
 
-Script:
+- `scripts/backtest_mvo.py`
+- `scripts/backtest_binary_mvo.py`
+
+실행:
 
 ```bash
-python3 scripts/backtest_binary_mvo.py \
-  --output outputs/results/backtest_binary_soft_mvo_results.json
-
-python3 scripts/backtest_binary_mvo.py \
-  --max-weight 0.5 \
-  --output outputs/results/backtest_binary_soft_mvo_cap50_results.json
-
 python3 scripts/backtest_binary_mvo.py \
   --max-weight 0.4 \
   --output outputs/results/backtest_binary_soft_mvo_cap40_results.json
 ```
 
-Regime-level MVO weights:
+Binary MVO cap별 비중:
 
 | Cap | Non-Bear MVO | Bear MVO |
 |---:|---|---|
@@ -842,78 +288,41 @@ Regime-level MVO weights:
 | 50% | SPY 50.0%, QQQ 49.8%, GLD 0.2% | QQQ 7.3%, GLD 42.7%, TLT 50.0% |
 | 40% | SPY 40.0%, QQQ 40.0%, GLD 17.3%, TLT 2.7% | QQQ 20.0%, GLD 40.0%, TLT 40.0% |
 
-Backtest result:
+Portfolio 결과:
 
 | Strategy | Cumulative Return | Sharpe | MDD | Calmar |
 |---|---:|---:|---:|---:|
-| 60/40 | 28.3% | 0.84 | -10.4% | 1.22 |
-| Buy & Hold | 49.9% | 1.07 | -17.0% | 1.26 |
-| EW 1/N | 50.9% | 1.41 | -8.8% | 2.47 |
-| 3-class Regime-MVO, original | 35.3% | 1.10 | -7.2% | 2.16 |
-| 3-class Regime-MVO, cap 40% | 51.9% | 1.46 | -9.0% | 2.47 |
-| Binary Regime-MVO Soft, no cap | 22.9% | 0.59 | -8.5% | 1.22 |
-| Binary Regime-MVO Soft, cap 50% | 47.9% | 1.37 | -8.3% | 2.48 |
-| Binary Regime-MVO Soft, cap 40% | 53.7% | 1.48 | -9.0% | 2.55 |
+| 3-class Regime-MVO original | 35.3% | 1.10 | -7.2% | 2.16 |
+| 3-class Regime-MVO cap 40% | 51.9% | 1.46 | -9.0% | 2.47 |
+| Binary Regime-MVO Soft no cap | 22.9% | 0.59 | -8.5% | 1.22 |
+| Binary Regime-MVO Soft cap 50% | 47.9% | 1.37 | -8.3% | 2.48 |
+| **Binary Regime-MVO Soft cap 40%** | **53.7%** | **1.48** | **-9.0%** | **2.55** |
 
-Cumulative-return ranking:
+해석:
 
-| Rank | Strategy | Cumulative Return |
-|---:|---|---:|
-| 1 | Binary Regime-MVO Soft, cap 40% | 53.7% |
-| 2 | 3-class Regime-MVO, cap 40% | 51.9% |
-| 3 | EW 1/N | 50.9% |
-| 4 | Buy & Hold | 49.9% |
-| 5 | Binary Regime-MVO Soft, cap 50% | 47.9% |
-| 6 | 3-class Regime-MVO, original | 35.3% |
-| 7 | 60/40 | 28.3% |
-| 8 | Binary Regime-MVO Soft, no cap | 22.9% |
-
-Interpretation:
-
-Binary Soft Label works better when it is connected back to MVO. The unconstrained 2-regime MVO collapses into extreme portfolios, `Non-Bear=SPY 100%` and `Bear=TLT 100%`, so it is still exposed to the same MVO concentration problem. But once the MVO cap is added, the binary MVO strategy becomes competitive.
-
-The best current binary MVO result is cap 40%:
-
-```text
-Binary Regime-MVO Soft, cap 40%
-cum_ret = 53.7%
-Sharpe  = 1.48
-MDD     = -9.0%
-Calmar  = 2.55
-```
-
-This is slightly better than EW 1/N and slightly better than 3-class capped Regime-MVO on cumulative return, Sharpe, and Calmar, while keeping a similar MDD.
-
-Current conclusion:
-
-The cleanest project story is now:
-
-```text
-Neutral is hard to classify
--> Collapse to Bear vs Non-Bear
--> Train Binary Soft Label model
--> Apply probabilities to 2-Regime MVO
--> Add MVO cap to avoid concentration
-```
-
-This is aligned with the original MVO-based project objective.
+cap이 없으면 binary MVO도 extreme portfolio로 무너진다. 하지만 cap을 추가하면 자산 쏠림이 줄고, risk-return 성과가 개선된다.
 
 ---
 
-## 9. Short Presentation/Q&A Framing
+## 9. 최종 발표용 요약 문장
 
-If asked why Neutral fails:
+팀원들과 공유할 때는 다음처럼 말하면 된다.
 
-> Neutral is structurally ambiguous because it is the middle HMM state, not a directly observed economic event. The model learns Bear and Bull more clearly, but Neutral often overlaps with both. Therefore, a natural next step is to reframe the task as Bear vs Non-Bear, which better matches the risk-management objective.
+> 3-class로 Bear / Neutral / Bull을 예측했을 때 Neutral Recall이 0.0%로 나왔습니다. Neutral은 HMM의 중간 상태라 경계가 애매하고, 모델이 Bear 또는 Bull로 흡수해버리는 문제가 있었습니다.
 
-If asked whether HMM labels are reliable:
+> 그래서 투자 목적에 맞게 Bear vs Non-Bear binary classification으로 바꿨고, Balanced Accuracy가 51.9%에서 70.2%로 개선되었습니다.
 
-> HMM labels are pseudo-labels, not ground truth. We therefore should not overclaim classification accuracy. A stronger extension is to train on HMM probabilities as soft labels or weight samples by HMM confidence.
+> 데이터가 작아서 LR/RF baseline도 확인했는데, LR < RF < LSTM 순서로 성능이 나와 시계열 딥러닝 모델의 효과는 있는 것으로 보입니다.
 
-If asked why MVO is unstable:
+> 이후 HMM posterior를 활용해 binary soft label을 적용하니 Bear Recall이 58.1%에서 67.4%로 개선되었습니다.
 
-> MVO depends on estimated means and covariance. After splitting by regime, each estimate is based on a small sample, so Sharpe-maximizing MVO can choose extreme weights. Constrained MVO, shrinkage, cash assets, or blending with equal weight are natural stabilizers.
+> 마지막으로 MVO에 자산별 weight cap 40%를 적용해 자산 몰빵을 줄였고, 최종적으로 Binary Regime-MVO Soft cap 40%가 누적수익률 53.7%, Sharpe 1.48, MDD -9.0%, Calmar 2.55로 가장 균형 잡힌 결과를 냈습니다.
 
-If asked what experiment should come first:
+---
 
-> First, Bear vs Non-Bear. It is the fastest, most aligned with the project's risk-control goal, and directly addresses the Neutral failure.
+## 10. 주의할 점
+
+- HMM label은 true label이 아니라 pseudo-label이다. 따라서 classification accuracy를 실제 시장 예측 정확도로 과대해석하면 안 된다.
+- cap 40%는 현재 test 구간에서 좋은 결과다. 더 엄밀하게는 validation 또는 walk-forward 방식으로 cap을 선택해야 한다.
+- SPY/Cash threshold 실험은 보조 sanity check였고, 최종 프로젝트 스토리에서는 제외한다. 최종 전략은 MVO 기반이다.
+- 추가 개선 후보는 covariance shrinkage, MVO/equal-weight blending, 현금/단기채 추가, walk-forward validation이다.

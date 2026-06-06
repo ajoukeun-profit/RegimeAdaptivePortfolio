@@ -1,8 +1,8 @@
-# Visualization Plan After Binary Soft MVO Experiments
+# Binary Soft MVO 실험 이후 시각화 계획
 
-## 1. Why Figures Need Updating
+## 1. 왜 그림을 업데이트했나
 
-The previous final figures were built around the older 3-class Regime-MVO result:
+기존 final figure는 오래된 3-class Regime-MVO 결과를 중심으로 만들어져 있었다.
 
 ```text
 3-class Regime-MVO original
@@ -12,7 +12,7 @@ MDD     = -7.2%
 Calmar  = 2.16
 ```
 
-After troubleshooting, the strongest current strategy changed to:
+하지만 troubleshooting 이후 현재 가장 강한 전략은 다음으로 바뀌었다.
 
 ```text
 Binary Regime-MVO Soft, cap 40%
@@ -22,32 +22,30 @@ MDD     = -9.0%
 Calmar  = 2.55
 ```
 
-Therefore, figures that claim "Regime-MVO is not a return-leading strategy" are now stale. The new story is more nuanced:
+따라서 "Regime-MVO는 수익률 1등 전략이 아니다"라는 예전 메시지는 더 이상 최종 결론으로 쓰면 안 된다. 새 결론은 다음에 가깝다.
 
-> Binary soft-label regime prediction plus capped 2-Regime MVO improves cumulative return and Calmar versus EW 1/N and 3-class capped MVO, while keeping MDD similar.
+> Binary soft-label 국면 예측과 capped 2-Regime MVO를 결합하면 EW 1/N 및 3-class capped MVO보다 누적수익률과 Calmar가 개선되고, MDD는 비슷한 수준으로 유지된다.
 
-## 2. Existing Figure Status
+## 2. 현재 Figure 상태
 
-| Figure | Current Status | Action |
+| Figure | 상태 | 처리 |
 |---|---|---|
-| `fig01_pipeline.png` | Mostly valid | Keep for now. Update only if the slide needs the Binary Soft Label -> 2-Regime MVO branch explicitly. |
-| `fig02_related_work.png` | Still valid | No urgent change. |
-| `fig03_static_dynamic_backtest.png` | Updated | Binary Regime-MVO Soft cap 40% is now the main dynamic strategy. |
-| `fig03_main_result.png` | Updated | Shows the new final strategy metric summary. |
-| `fig04_classification_performance.png` | Updated | Includes Binary Hard Label, Binary Soft Label, LR, and RF. |
-| `fig05_confusion_matrix.png` | Updated | Uses Binary Soft Label confusion matrix. |
-| `fig07_ablation.png` | Updated | Compares Buy & Hold, EW 1/N, 3-class capped MVO, and Binary Soft MVO. |
-| `fig09_binary_mvo_weights.png` | Added | Shows how MVO caps prevent extreme binary regime weights. |
+| `fig01_pipeline.png` | 대체로 유효 | 필요하면 Binary Soft Label -> 2-Regime MVO 흐름을 더 명시적으로 업데이트 |
+| `fig02_related_work.png` | 유효 | 수정 필요 없음 |
+| `fig03_static_dynamic_backtest.png` | 업데이트 완료 | Binary Regime-MVO Soft cap 40%를 메인 동적 전략으로 사용 |
+| `fig03_main_result.png` | 업데이트 완료 | 새 최종 전략의 핵심 성과 요약 |
+| `fig04_classification_performance.png` | 업데이트 완료 | Binary Hard, Binary Soft, LR, RF 비교 |
+| `fig05_confusion_matrix.png` | 업데이트 완료 | Binary Soft Label confusion matrix |
+| `fig07_ablation.png` | 업데이트 완료 | Buy & Hold, EW 1/N, 3-class capped MVO, Binary Soft MVO 비교 |
+| `fig09_binary_mvo_weights.png` | 추가 완료 | MVO cap이 extreme weight를 줄이는 효과 시각화 |
 
-## 3. Required New Figures
+## 3. 최종 발표에 필요한 그림
 
-### Figure A: Final Strategy Metric Summary
+### Figure A: 최종 전략 성과 요약
 
-Purpose:
+목적:
 
-Show the final strategy against the main benchmarks.
-
-Strategies:
+최종 전략을 주요 benchmark와 직접 비교한다.
 
 | Strategy | CumRet | Sharpe | MDD | Calmar |
 |---|---:|---:|---:|---:|
@@ -57,38 +55,36 @@ Strategies:
 | 3-class Regime-MVO cap 40% | 51.9% | 1.46 | -9.0% | 2.47 |
 | Binary Regime-MVO Soft cap 40% | 53.7% | 1.48 | -9.0% | 2.55 |
 
-Recommended chart:
+추천 형태:
 
-- 3-panel bar chart: cumulative return, MDD, Calmar
-- Highlight Binary Regime-MVO Soft cap 40%
-- Keep EW 1/N visible because it is the strongest simple benchmark
+- 누적수익률, MDD, Calmar를 나눠 보여주는 3-panel bar chart
+- Binary Regime-MVO Soft cap 40% 강조
+- EW 1/N은 가장 강한 단순 benchmark이므로 반드시 같이 표시
 
-### Figure B: Cumulative Return and Drawdown Path
+### Figure B: 누적수익률과 Drawdown 경로
 
-Purpose:
+목적:
 
-Show that the final strategy does not just win in a summary table.
+최종 전략이 단순히 표에서만 좋아 보이는 것이 아니라, 실제 테스트 기간 경로에서도 어떤 움직임을 보이는지 보여준다.
 
-Strategies:
+비교 전략:
 
 - Buy & Hold
 - EW 1/N
 - 3-class Regime-MVO cap 40%
 - Binary Regime-MVO Soft cap 40%
 
-Recommended chart:
+추천 형태:
 
-- Top panel: cumulative return path
-- Bottom panel: drawdown path
-- Same test period: 2024-04-15 to 2026-05-15
+- 위쪽: 누적수익률 경로
+- 아래쪽: drawdown 경로
+- 테스트 기간: 2024-04-15 ~ 2026-05-15
 
-### Figure C: Classification Improvement
+### Figure C: 분류 성능 개선
 
-Purpose:
+목적:
 
-Explain why binary soft labels were introduced before portfolio evaluation.
-
-Rows:
+왜 3-class에서 binary soft label로 넘어갔는지 설명한다.
 
 | Model | Balanced Accuracy | Bear Recall |
 |---|---:|---:|
@@ -98,18 +94,16 @@ Rows:
 | LR baseline | 61.4% | 32.6% |
 | RF baseline | 66.3% | 53.5% |
 
-Recommended chart:
+추천 형태:
 
-- Horizontal bar chart or compact table
-- Highlight Bear Recall because it is the risk-detection metric
+- 가로 bar chart 또는 compact table
+- 하방 위험 탐지가 목적이므로 Bear Recall 강조
 
-### Figure D: Binary MVO Weight Composition
+### Figure D: Binary MVO 비중 구성
 
-Purpose:
+목적:
 
-Show why the MVO cap matters.
-
-Rows:
+MVO cap이 왜 필요한지 시각적으로 보여준다.
 
 | Cap | Non-Bear MVO | Bear MVO |
 |---:|---|---|
@@ -117,21 +111,21 @@ Rows:
 | 50% | SPY 50.0%, QQQ 49.8%, GLD 0.2% | QQQ 7.3%, GLD 42.7%, TLT 50.0% |
 | 40% | SPY 40.0%, QQQ 40.0%, GLD 17.3%, TLT 2.7% | QQQ 20.0%, GLD 40.0%, TLT 40.0% |
 
-Recommended chart:
+추천 형태:
 
 - Stacked bar chart
-- Separate panels for Non-Bear and Bear
-- Use this to explain concentration risk visually
+- Non-Bear / Bear 패널 분리
+- 특정 자산 몰빵을 줄이는 효과를 설명하는 데 사용
 
-## 4. Current Generator
+## 4. 현재 Figure 생성 스크립트
 
-The cleaned final figure set is generated by:
+정리된 final figure set은 다음 명령으로 생성한다.
 
 ```bash
 python3 scripts/visualize_binary_mvo_results.py
 ```
 
-This script regenerates:
+이 스크립트가 다시 생성하는 파일:
 
 - `outputs/figures/final/fig03_static_dynamic_backtest.png`
 - `outputs/figures/final/fig03_main_result.png`
@@ -140,9 +134,24 @@ This script regenerates:
 - `outputs/figures/final/fig07_ablation.png`
 - `outputs/figures/final/fig09_binary_mvo_weights.png`
 
-## 5. Current Status
+나머지 파이프라인/관련연구 그림은 아래 스크립트로 생성한다.
 
-The README, presentation outline, troubleshooting notes, and figure guide are synchronized around the current final strategy:
+```bash
+python3 scripts/visualize_pipeline.py
+python3 scripts/visualize_related_work.py
+```
+
+## 5. 현재 문서 동기화 상태
+
+다음 문서들은 현재 최종 전략 기준으로 동기화되어 있다.
+
+- `README.md`
+- `docs/PRESENTATION_OUTLINE.md`
+- `docs/TROUBLESHOOTING.md`
+- `docs/CONCEPTUAL_MATH_REPORT_NOTION.md`
+- `outputs/figures/README.md`
+
+현재 최종 전략:
 
 ```text
 Binary Soft Label + 2-Regime MVO + cap 40%

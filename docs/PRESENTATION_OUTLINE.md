@@ -1,6 +1,6 @@
-# 15분 발표 개요: Market Regime-Aware Dynamic Portfolio Strategy
+# 15분 발표 개요: 시장 국면 인식 기반 동적 포트폴리오 전략
 
-> 한국어 제목: 시장 국면 인식 기반 동적 포트폴리오 전략
+> 영문 부제: Market Regime-Aware Dynamic Portfolio Strategy
 
 ## 0. 발표 핵심 메시지
 
@@ -24,7 +24,7 @@ Binary Regime-MVO Soft, cap 40%
 
 핵심 결과:
 
-| Strategy | CumRet | Sharpe | MDD | Calmar |
+| 전략 | 누적수익률 | Sharpe | MDD | Calmar |
 |---|---:|---:|---:|---:|
 | 60/40 | 28.3% | 0.84 | -10.4% | 1.22 |
 | Buy & Hold | 49.9% | 1.07 | -17.0% | 1.26 |
@@ -43,18 +43,18 @@ Binary Regime-MVO Soft, cap 40%
 
 ## 1. 15분 발표 구조
 
-| Section | 내용 | 시간 | Slide |
+| 구간 | 내용 | 시간 | 슬라이드 |
 |---|---|---:|---:|
-| 1. Background | 왜 regime-aware portfolio가 필요한가 | 2분 | 1-2 |
-| 2. Methodology | HMM pseudo-label, Conv1D+LSTM, Regime-MVO | 3분 | 3-5 |
-| 3. Problem Diagnosis | Neutral failure, pseudo-label, MVO estimation error | 3분 | 6-7 |
-| 4. Experiments | Binary, baseline, soft label, MVO cap | 3분 | 8-9 |
-| 5. Final Results | Binary Soft 2-Regime MVO cap 40% | 3분 | 10-11 |
-| 6. Conclusion | 결론, 한계, 향후 개선 | 1분 | 12 |
+| 1. 배경 | 왜 국면 인식 포트폴리오가 필요한가 | 2분 | 1-2 |
+| 2. 방법론 | HMM pseudo-label, Conv1D+LSTM, Regime-MVO | 3분 | 3-5 |
+| 3. 문제 진단 | Neutral 실패, pseudo-label, MVO 추정 오차 | 3분 | 6-7 |
+| 4. 실험 | Binary, baseline, soft label, MVO cap | 3분 | 8-9 |
+| 5. 최종 결과 | Binary Soft 2-Regime MVO cap 40% | 3분 | 10-11 |
+| 6. 결론 | 결론, 한계, 향후 개선 | 1분 | 12 |
 
-## 2. Slide-by-Slide Outline
+## 2. 슬라이드별 발표 흐름
 
-### Slide 1. Title
+### Slide 1. 제목
 
 제목:
 
@@ -67,7 +67,7 @@ Market Regime-Aware Dynamic Portfolio Strategy
 - 가격을 직접 예측하는 대신 시장 국면을 예측한다.
 - 예측된 국면 확률을 포트폴리오 비중 조절에 사용한다.
 
-### Slide 2. Background: 왜 정적 포트폴리오가 부족한가
+### Slide 2. 배경: 왜 정적 포트폴리오가 부족한가
 
 핵심 질문:
 
@@ -80,7 +80,7 @@ Market Regime-Aware Dynamic Portfolio Strategy
 - 상승장, 하락장, 중립장에서는 자산 간 관계가 달라질 수 있다.
 - 따라서 regime-aware allocation이 필요하다.
 
-### Slide 3. Pipeline
+### Slide 3. 전체 파이프라인
 
 Figure:
 
@@ -101,7 +101,7 @@ SPY/QQQ/GLD/TLT OHLCV
 
 - HMM label은 ground truth가 아니라 pseudo-label이다.
 
-### Slide 4. Original 3-Class Setup
+### Slide 4. 기존 3-class 설정
 
 기존 설정:
 
@@ -111,7 +111,7 @@ Bear / Neutral / Bull
 
 3-class 모델 결과:
 
-| Metric | Value |
+| 지표 | 값 |
 |---|---:|
 | Accuracy | 61.9% |
 | Balanced Accuracy | 51.9% |
@@ -125,11 +125,11 @@ Bear / Neutral / Bull
 - Neutral은 test에서 한 번도 예측되지 않는다.
 - Neutral은 경제적으로도 경계가 애매한 중간 국면이다.
 
-### Slide 5. Problem Diagnosis
+### Slide 5. 문제 진단
 
 문제 3개:
 
-| Problem | Evidence | Fix Direction |
+| 문제 | 근거 | 해결 방향 |
 |---|---|---|
 | Neutral label failure | Neutral Recall 0.0% | Bear vs Non-Bear |
 | HMM pseudo-label uncertainty | HMM label is model-generated | Soft label |
@@ -141,7 +141,7 @@ Gradient 문제:
 - loss divergence나 NaN 증거는 없다.
 - 현재 핵심 문제는 gradient보다 label definition과 MVO estimation이다.
 
-### Slide 6. Experiment 1: Binary Bear vs Non-Bear
+### Slide 6. 실험 1: Binary Bear vs Non-Bear
 
 목적:
 
@@ -149,7 +149,7 @@ Neutral ambiguity를 제거하고 downside-risk detection에 집중한다.
 
 결과:
 
-| Model | Balanced Accuracy | Bear Recall |
+| 모델 | Balanced Accuracy | Bear Recall |
 |---|---:|---:|
 | 3-class hard label | 51.9% | 60.5% |
 | Binary hard label | 70.2% | 58.1% |
@@ -159,7 +159,7 @@ Neutral ambiguity를 제거하고 downside-risk detection에 집중한다.
 - Balanced Accuracy가 51.9%에서 70.2%로 크게 개선됐다.
 - Bear Recall은 약간 낮지만, binary task가 훨씬 안정적이다.
 
-### Slide 7. Experiment 2: LR/RF Baseline
+### Slide 7. 실험 2: LR/RF Baseline
 
 목적:
 
@@ -167,7 +167,7 @@ Neutral ambiguity를 제거하고 downside-risk detection에 집중한다.
 
 결과:
 
-| Model | Test Balanced Accuracy | Bear Recall |
+| 모델 | Test Balanced Accuracy | Bear Recall |
 |---|---:|---:|
 | Logistic Regression | 61.4% | 32.6% |
 | Random Forest | 66.3% | 53.5% |
@@ -178,7 +178,7 @@ Neutral ambiguity를 제거하고 downside-risk detection에 집중한다.
 - LR < RF < LSTM 순서다.
 - 시계열 패턴을 학습하는 Conv1D+LSTM의 효과가 있다.
 
-### Slide 8. Experiment 3: Binary Soft Label
+### Slide 8. 실험 3: Binary Soft Label
 
 Figure:
 
@@ -194,7 +194,7 @@ P(Bear)     = P(Bear)
 
 결과:
 
-| Model | Balanced Accuracy | Bear Recall |
+| 모델 | Balanced Accuracy | Bear Recall |
 |---|---:|---:|
 | Binary hard label | 70.2% | 58.1% |
 | Binary soft label | 72.4% | 67.4% |
@@ -205,7 +205,7 @@ P(Bear)     = P(Bear)
 - Bear Recall이 58.1%에서 67.4%로 상승했다.
 - 이 확률을 최종적으로 2-Regime MVO에 연결한다.
 
-### Slide 9. Experiment 4: MVO Cap
+### Slide 9. 실험 4: MVO Cap
 
 Figure:
 
@@ -228,7 +228,7 @@ Binary MVO weight example:
 - cap이 없으면 자산 몰빵이 발생한다.
 - cap 40%는 비중을 분산시켜 추정 오차 민감도를 낮춘다.
 
-### Slide 10. Final Strategy: Binary Soft Label + 2-Regime MVO
+### Slide 10. 최종 전략: Binary Soft Label + 2-Regime MVO
 
 최종 전략:
 
@@ -251,7 +251,7 @@ Figure:
 
 - [fig03_static_dynamic_backtest.png](../outputs/figures/final/fig03_static_dynamic_backtest.png)
 
-### Slide 11. Final Results
+### Slide 11. 최종 결과
 
 Figure:
 
@@ -260,7 +260,7 @@ Figure:
 
 결과:
 
-| Strategy | CumRet | Sharpe | MDD | Calmar |
+| 전략 | 누적수익률 | Sharpe | MDD | Calmar |
 |---|---:|---:|---:|---:|
 | Buy & Hold | 49.9% | 1.07 | -17.0% | 1.26 |
 | EW 1/N | 50.9% | 1.41 | -8.8% | 2.47 |
@@ -274,7 +274,7 @@ Figure:
 - 3-class capped MVO 대비 누적수익률과 Calmar가 소폭 개선된다.
 - 단일 test 구간 결과이므로 일반화에는 주의한다.
 
-### Slide 12. Conclusion
+### Slide 12. 결론
 
 결론:
 
@@ -297,7 +297,7 @@ Figure:
 
 ## 3. 사용할 최종 Figure
 
-| Figure | File | 역할 |
+| 그림 | 파일 | 역할 |
 |---|---|---|
 | Fig 01 | [fig01_pipeline.png](../outputs/figures/final/fig01_pipeline.png) | 전체 파이프라인 |
 | Fig 02 | [fig02_related_work.png](../outputs/figures/final/fig02_related_work.png) | 선행연구 |
